@@ -107,7 +107,7 @@ bool verify_matrix(float *matRef, float *matOut, int N) {
   int i;
   for (i = 0; i < N; i++) {
     diff = std::fabs(matRef[i] - matOut[i]);
-    if (diff > 0.01) {
+    if (isnan(diff) || diff > 0.01) {
       printf("Divergence! Should %5.2f, Is %5.2f (Diff %5.2f) at %d\n",
              matRef[i], matOut[i], diff, i);
       return false;
