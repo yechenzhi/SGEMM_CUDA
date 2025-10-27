@@ -14,3 +14,4 @@
 #include "kernels/9_kernel_autotuned.cuh"
 
 #include "kernels/13_my_naive.cuh"
+#include "kernels/14_my_global_mem_coalesce.cuh"
