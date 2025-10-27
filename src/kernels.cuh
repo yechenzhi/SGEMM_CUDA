@@ -15,3 +15,4 @@
 
 #include "kernels/13_my_naive.cuh"
 #include "kernels/14_my_global_mem_coalesce.cuh"
+#include "kernels/15_my_shared_mem_mem_blocking.cuh"
