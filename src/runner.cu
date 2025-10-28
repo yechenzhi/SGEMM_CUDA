@@ -218,6 +218,18 @@ void runSgemm1DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
       <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
+void run_my_Sgemm1DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
+                           float beta, float *C) {
+  const uint BM = 64;
+  const uint BN = 64;
+  const uint BK = 8;
+  const uint TM = 8;
+  dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
+  dim3 blockDim(BM, BN / TM);
+  my_sgemm1DBlocktiling<BM, BN, BK, TM>
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
 void runSgemm2DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
                            float beta, float *C) {
   const uint BK = 8;
@@ -552,6 +564,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A,
     break;
   case 4:
     runSgemm1DBlocktiling(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 16:
+    run_my_Sgemm1DBlocktiling(M, N, K, alpha, A, B, beta, C);
     break;
   case 5:
     runSgemm2DBlocktiling(M, N, K, alpha, A, B, beta, C);
