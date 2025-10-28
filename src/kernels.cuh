@@ -17,3 +17,5 @@
 #include "kernels/14_my_global_mem_coalesce.cuh"
 #include "kernels/15_my_shared_mem_mem_blocking.cuh"
 #include "kernels/16_my_1d_blocktiling.cuh"
+#include "kernels/17_my_2d_blocktiling.cuh"
+#include "kernels/18_my_2d_blocktiling_v2.cuh"
