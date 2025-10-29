@@ -9,7 +9,7 @@
 #define CEIL_DIV(M, N) (((M) + (N)-1) / (N))
 
 template <const int BM, const int BN, const int BK, const int TM, const int TN>
-__global__ void my_sgemm2DBlocktiling(int M, int N, int K, float alpha,
+__global__ void my_sgemm2DBlocktiling_v3(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
                                        float beta, float *C) {
   const int row_start = blockIdx.y * BM + threadIdx.y * TM;
@@ -20,19 +20,18 @@ __global__ void my_sgemm2DBlocktiling(int M, int N, int K, float alpha,
 
   float threadResults[TM][TN] = {{0.0}};
   const int tid = threadIdx.y * blockDim.x + threadIdx.x;
-  const int strideA = BM * BK / (blockDim.x * blockDim.y);
-  const int strideB = BK * BN / (blockDim.x * blockDim.y);
+  const int strideA = (blockDim.x * blockDim.y) / BK;
+  const int strideB = (blockDim.x * blockDim.y) / BN;
 
-  const int as_row_start = tid / BK * strideA;
+  const int as_row_start = tid / BK;
   const int as_col = tid % BK;
-  const int bs_row_start = tid / BN * strideB;
+  const int bs_row_start = tid / BN;
   const int bs_col = tid % BN;
-  
+
   for (int bkIdx = 0; bkIdx < K; bkIdx += BK) {
     // for A: row = blockIdx.y * blockDim.y + threadIdx.x / BK, col = bkIdx + threadIdx.x % BK
     // for B: row = bkIdx + threadIdx.y, col = col
-
-    for(int row_offset = 0; row_offset < strideA; ++row_offset) {
+    for(int row_offset = 0; row_offset < BM; row_offset += strideA) {
         int as_row = as_row_start + row_offset;
         int Arow = blockIdx.y * BM + as_row;
         int Acol = bkIdx + as_col;
@@ -42,7 +41,7 @@ __global__ void my_sgemm2DBlocktiling(int M, int N, int K, float alpha,
             As[as_row][as_col] = 0.0;
         }
     }
-    for(int row_offset = 0; row_offset < strideB; ++row_offset) {
+    for(int row_offset = 0; row_offset < BK; row_offset += strideB) {
         int bs_row = bs_row_start + row_offset;
         int Brow = bkIdx + bs_row;
         int Bcol = blockIdx.x * BN + bs_col;
@@ -54,6 +53,7 @@ __global__ void my_sgemm2DBlocktiling(int M, int N, int K, float alpha,
     }
     // block threads in this block until cache is fully populated
     __syncthreads();
+
     for(int k = 0; k < BK; ++k) {
         for (int tmIdx = 0; tmIdx < TM; ++tmIdx) {
             for (int tnIdx = 0; tnIdx < TN; ++tnIdx) {
