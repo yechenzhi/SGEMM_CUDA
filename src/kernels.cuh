@@ -21,3 +21,4 @@
 #include "kernels/18_my_2d_blocktiling_v2.cuh"
 #include "kernels/19_my_2d_blocktiling_v3.cuh"
 #include "kernels/20_my_vectorize.cuh"
+#include "kernels/21_resolve_bank_conflict.cuh"
