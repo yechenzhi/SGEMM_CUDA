@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
 
   // get kernel number
   int kernel_num = std::stoi(argv[1]);
-  if (kernel_num < 0 || kernel_num > 20) {
+  if (kernel_num < 0 || kernel_num >30) {
     std::cerr << "Please enter a valid kernel number (0-20)" << std::endl;
     exit(EXIT_FAILURE);
   }

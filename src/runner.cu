@@ -438,6 +438,54 @@ void runSgemmAutotuned(int M, int N, int K, float alpha, float *A, float *B,
       <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
+// 这是 Kernel 20 的 autotuning host 函数
+void runKernel20Autotuned(int M, int N, int K, float alpha, float *A, float *B,
+                         float beta, float *C) {
+  // =================================================================
+  // 这些常量将会被 autotune_kernel20.sh 脚本自动修改
+  // 这里的初始值只是一个占位符
+  const uint K20_BK = 32;
+  const uint K20_TM = 8;
+  const uint K20_TN = 8;
+  const uint K20_BM = 128;
+  const uint K20_BN = 128;
+  // =================================================================
+  
+  // blockDim 的计算方式与你的原始代码保持一致
+  const uint K20_BLOCK_DIM_X = K20_BN / K20_TN;
+  const uint K20_BLOCK_DIM_Y = K20_BM / K20_TM;
+  const uint K20_NUM_THREADS = K20_BLOCK_DIM_X * K20_BLOCK_DIM_Y;
+
+  // 添加 static_assert 来在编译时检查约束条件
+  // 这样如果脚本生成了无效的参数组合，编译会直接失败，节省调试时间
+  
+  // 约束1：确保 blockDim 可以整除
+  static_assert(K20_BN % K20_TN == 0, "K20_BN must be a multiple of K20_TN");
+  static_assert(K20_BM % K20_TM == 0, "K20_BM must be a multiple of K20_TM");
+
+  // 约束2：确保线程总数不超过 GPU 限制 (通常是 1024)
+  static_assert(K20_NUM_THREADS <= 1024, "Total number of threads exceeds 1024");
+  
+  // 约束3：As tile 的大小必须能被线程块的总加载量整除 (float4 vectorized load)
+  // 每个线程加载 (BM*BK)/(NT) 个元素, 每次加载4个, 所以是 (BM*BK)/(NT*4) 次
+  static_assert((K20_BM * K20_BK) % (4 * K20_NUM_THREADS) == 0,
+                "The total elements in As tile (BM*BK) must be divisible by "
+                "the total float4 load capacity of the block (4 * NUM_THREADS)");
+
+  // 约束4：Bs tile 的大小必须能被线程块的总加载量整除
+  static_assert((K20_BN * K20_BK) % (4 * K20_NUM_THREADS) == 0,
+                "The total elements in Bs tile (BN*BK) must be divisible by "
+                "the total float4 load capacity of the block (4 * NUM_THREADS)");
+
+  // 设置 Grid 和 Block 维度
+  dim3 gridDim(CEIL_DIV(N, K20_BN), CEIL_DIV(M, K20_BM));
+  dim3 blockDim(K20_BLOCK_DIM_X, K20_BLOCK_DIM_Y);
+
+  // 启动你的 Kernel 20
+  my_sgemmVectorize<K20_BM, K20_BN, K20_BK, K20_TM, K20_TN>
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
 void runSgemmWarptiling(int M, int N, int K, float alpha, float *A, float *B,
                         float beta, float *C) {
   // Settings for A100
@@ -498,6 +546,190 @@ void runSgemmWarptiling(int M, int N, int K, float alpha, float *A, float *B,
                   K10_TN, K10_NUM_THREADS>
       <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
+
+void run_my_SgemmWarptiling(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+  // Settings for A100
+  // const uint K23_NUM_THREADS = 128;
+  // const uint K23_BN = 128;
+  // const uint K23_BM = 64;
+  // const uint K23_BK = 16;
+  // const uint K23_WN = 64;
+  // const uint K23_WM = 32;
+  // const uint K23_WNITER = 1;
+  // const uint K23_TN = 4;
+  // const uint K23_TM = 4;
+  // Settings for A6000
+  const uint K23_NUM_THREADS = 128;
+  const uint K23_BN = 128;
+  const uint K23_BM = 128;
+  const uint K23_BK = 16;
+  const uint K23_WN = 64;
+  const uint K23_WM = 64;
+  const uint K23_WNITER = 4;
+  const uint K23_TN = 4;
+  const uint K23_TM = 8;
+  dim3 blockDim(K23_NUM_THREADS);
+
+  constexpr uint NUM_WARPS = K23_NUM_THREADS / 32;
+
+  // warptile in threadblocktile
+  static_assert((K23_BN % K23_WN == 0) and (K23_BM % K23_WM == 0));
+  static_assert((K23_BN / K23_WN) * (K23_BM / K23_WM) == NUM_WARPS);
+
+  // threads in warpsubtile
+  static_assert((K23_WM * K23_WN) % (WARPSIZE * K23_TM * K23_TN * K23_WNITER) ==
+                0);
+  constexpr uint K23_WMITER =
+      (K23_WM * K23_WN) / (32 * K23_TM * K23_TN * K23_WNITER);
+  // warpsubtile in warptile
+  static_assert((K23_WM % K23_WMITER == 0) and (K23_WN % K23_WNITER == 0));
+
+  static_assert((K23_NUM_THREADS * 4) % K23_BK == 0,
+                "NUM_THREADS*4 must be multiple of K9_BK to avoid quantization "
+                "issues during GMEM->SMEM tiling (loading only parts of the "
+                "final row of Bs during each iteraion)");
+  static_assert((K23_NUM_THREADS * 4) % K23_BN == 0,
+                "NUM_THREADS*4 must be multiple of K9_BN to avoid quantization "
+                "issues during GMEM->SMEM tiling (loading only parts of the "
+                "final row of As during each iteration)");
+  static_assert(K23_BN % (16 * K23_TN) == 0,
+                "BN must be a multiple of 16*TN to avoid quantization effects");
+  static_assert(K23_BM % (16 * K23_TM) == 0,
+                "BM must be a multiple of 16*TM to avoid quantization effects");
+  static_assert((K23_BM * K23_BK) % (4 * K23_NUM_THREADS) == 0,
+                "BM*BK must be a multiple of 4*256 to vectorize loads");
+  static_assert((K23_BN * K23_BK) % (4 * K23_NUM_THREADS) == 0,
+                "BN*BK must be a multiple of 4*256 to vectorize loads");
+
+  dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
+  my_sgemmWarptiling<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
+                  K23_TN, K23_NUM_THREADS>
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
+void run_my_SgemmWarptiling_compute(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+  // Settings for A100
+  // const uint K23_NUM_THREADS = 128;
+  // const uint K23_BN = 128;
+  // const uint K23_BM = 64;
+  // const uint K23_BK = 16;
+  // const uint K23_WN = 64;
+  // const uint K23_WM = 32;
+  // const uint K23_WNITER = 1;
+  // const uint K23_TN = 4;
+  // const uint K23_TM = 4;
+  // Settings for A6000
+  const uint K23_NUM_THREADS = 128;
+  const uint K23_BN = 128;
+  const uint K23_BM = 128;
+  const uint K23_BK = 16;
+  const uint K23_WN = 64;
+  const uint K23_WM = 64;
+  const uint K23_WNITER = 4;
+  const uint K23_TN = 4;
+  const uint K23_TM = 8;
+  dim3 blockDim(K23_NUM_THREADS);
+
+  constexpr uint NUM_WARPS = K23_NUM_THREADS / 32;
+
+  // warptile in threadblocktile
+  static_assert((K23_BN % K23_WN == 0) and (K23_BM % K23_WM == 0));
+  static_assert((K23_BN / K23_WN) * (K23_BM / K23_WM) == NUM_WARPS);
+
+  // threads in warpsubtile
+  static_assert((K23_WM * K23_WN) % (WARPSIZE * K23_TM * K23_TN * K23_WNITER) ==
+                0);
+  constexpr uint K23_WMITER =
+      (K23_WM * K23_WN) / (32 * K23_TM * K23_TN * K23_WNITER);
+  // warpsubtile in warptile
+  static_assert((K23_WM % K23_WMITER == 0) and (K23_WN % K23_WNITER == 0));
+
+  static_assert((K23_NUM_THREADS * 4) % K23_BK == 0,
+                "NUM_THREADS*4 must be multiple of K9_BK to avoid quantization "
+                "issues during GMEM->SMEM tiling (loading only parts of the "
+                "final row of Bs during each iteraion)");
+  static_assert((K23_NUM_THREADS * 4) % K23_BN == 0,
+                "NUM_THREADS*4 must be multiple of K9_BN to avoid quantization "
+                "issues during GMEM->SMEM tiling (loading only parts of the "
+                "final row of As during each iteration)");
+  static_assert(K23_BN % (16 * K23_TN) == 0,
+                "BN must be a multiple of 16*TN to avoid quantization effects");
+  static_assert(K23_BM % (16 * K23_TM) == 0,
+                "BM must be a multiple of 16*TM to avoid quantization effects");
+  static_assert((K23_BM * K23_BK) % (4 * K23_NUM_THREADS) == 0,
+                "BM*BK must be a multiple of 4*256 to vectorize loads");
+  static_assert((K23_BN * K23_BK) % (4 * K23_NUM_THREADS) == 0,
+                "BN*BK must be a multiple of 4*256 to vectorize loads");
+
+  dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
+  my_sgemmWarptiling_compute<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
+                  K23_TN, K23_NUM_THREADS>
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
+void run_my_SgemmWarptiling_write(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+  // Settings for A100
+  // const uint K23_NUM_THREADS = 128;
+  // const uint K23_BN = 128;
+  // const uint K23_BM = 64;
+  // const uint K23_BK = 16;
+  // const uint K23_WN = 64;
+  // const uint K23_WM = 32;
+  // const uint K23_WNITER = 1;
+  // const uint K23_TN = 4;
+  // const uint K23_TM = 4;
+  // Settings for A6000
+  const uint K23_NUM_THREADS = 128;
+  const uint K23_BN = 128;
+  const uint K23_BM = 128;
+  const uint K23_BK = 16;
+  const uint K23_WN = 64;
+  const uint K23_WM = 64;
+  const uint K23_WNITER = 4;
+  const uint K23_TN = 4;
+  const uint K23_TM = 8;
+  dim3 blockDim(K23_NUM_THREADS);
+
+  constexpr uint NUM_WARPS = K23_NUM_THREADS / 32;
+
+  // warptile in threadblocktile
+  static_assert((K23_BN % K23_WN == 0) and (K23_BM % K23_WM == 0));
+  static_assert((K23_BN / K23_WN) * (K23_BM / K23_WM) == NUM_WARPS);
+
+  // threads in warpsubtile
+  static_assert((K23_WM * K23_WN) % (WARPSIZE * K23_TM * K23_TN * K23_WNITER) ==
+                0);
+  constexpr uint K23_WMITER =
+      (K23_WM * K23_WN) / (32 * K23_TM * K23_TN * K23_WNITER);
+  // warpsubtile in warptile
+  static_assert((K23_WM % K23_WMITER == 0) and (K23_WN % K23_WNITER == 0));
+
+  static_assert((K23_NUM_THREADS * 4) % K23_BK == 0,
+                "NUM_THREADS*4 must be multiple of K9_BK to avoid quantization "
+                "issues during GMEM->SMEM tiling (loading only parts of the "
+                "final row of Bs during each iteraion)");
+  static_assert((K23_NUM_THREADS * 4) % K23_BN == 0,
+                "NUM_THREADS*4 must be multiple of K9_BN to avoid quantization "
+                "issues during GMEM->SMEM tiling (loading only parts of the "
+                "final row of As during each iteration)");
+  static_assert(K23_BN % (16 * K23_TN) == 0,
+                "BN must be a multiple of 16*TN to avoid quantization effects");
+  static_assert(K23_BM % (16 * K23_TM) == 0,
+                "BM must be a multiple of 16*TM to avoid quantization effects");
+  static_assert((K23_BM * K23_BK) % (4 * K23_NUM_THREADS) == 0,
+                "BM*BK must be a multiple of 4*256 to vectorize loads");
+  static_assert((K23_BN * K23_BK) % (4 * K23_NUM_THREADS) == 0,
+                "BN*BK must be a multiple of 4*256 to vectorize loads");
+
+  dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
+  my_sgemmWarptiling_write<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
+                  K23_TN, K23_NUM_THREADS>
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+}
+
 
 void runSgemmDoubleBuffering(int M, int N, int K, float alpha, float *A,
                              float *B, float beta, float *C) {
@@ -659,6 +891,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A,
   case 7:
     runSgemmResolveBankConflicts(M, N, K, alpha, A, B, beta, C);
     break;
+  case 22:
+    runKernel20Autotuned(M, N, K, alpha, A, B, beta, C);
+    break;
   case 21:
     run_my_ResolveBankConflicts(M, N, K, alpha, A, B, beta, C);
     break;
@@ -670,6 +905,15 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A,
     break;
   case 10:
     runSgemmWarptiling(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 23:
+    run_my_SgemmWarptiling(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 24:
+    run_my_SgemmWarptiling_compute(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 25:
+    run_my_SgemmWarptiling_write(M, N, K, alpha, A, B, beta, C);
     break;
   case 11:
     runSgemmDoubleBuffering(M, N, K, alpha, A, B, beta, C);

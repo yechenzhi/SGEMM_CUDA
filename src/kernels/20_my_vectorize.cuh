@@ -16,7 +16,7 @@ __global__ void my_sgemmVectorize(int M, int N, int K, float alpha,
   const int col_start = blockIdx.x * BN + threadIdx.x * TN;
   
   __shared__ float As[BK][BM];
-  __shared__ float Bs[BK][BN+4];
+  __shared__ float Bs[BK][BN];
 
   float threadResults[TM][TN] = {{0.0}};
   const int tid = threadIdx.y * blockDim.x + threadIdx.x;
