@@ -87,6 +87,11 @@ __global__ void __launch_bounds__(NUM_THREADS)
                 }
             }
         }
+        // for (int m_idx = 0; m_idx < WMITER * TM; ++m_idx) {
+        //     for (int n_idx = 0; n_idx < WNITER * TN; ++n_idx) {
+        //         threadResults[m_idx][n_idx] += regM[m_idx] * regN[n_idx];
+        //     }
+        // }
     }
     __syncthreads();
    

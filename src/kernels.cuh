@@ -25,3 +25,6 @@
 #include "kernels/23_my_warptiling.cuh"
 #include "kernels/24_my_warptiling_compute.cuh"
 #include "kernels/25_my_warptiling_write.cuh"
+#include "kernels/26_my_warptiling_pointer_bug.cuh"
+#include "kernels/27_my_warptiling_pointer.cuh"
+#include "kernels/28_my_waptiling_device.cuh"
