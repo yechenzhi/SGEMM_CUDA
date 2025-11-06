@@ -28,3 +28,4 @@
 #include "kernels/26_my_warptiling_pointer_bug.cuh"
 #include "kernels/27_my_warptiling_pointer.cuh"
 #include "kernels/28_my_waptiling_device.cuh"
+#include "kernels/30_bf16_warptiling.cuh"

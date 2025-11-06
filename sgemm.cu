@@ -98,11 +98,7 @@ int main(int argc, char **argv) {
     // Verify the correctness of the calculation, and execute it once before the
     // kernel function timing to avoid cold start errors
     if (kernel_num != 0 && kernel_num != 29) {
-      int base_kernel_num = 0;
-      if (kernel_num > 29) {
-        base_kernel_num = 29;
-      }
-      run_kernel(base_kernel_num, m, n, k, alpha, dA, dB, beta, dC_ref,
+      run_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref,
                  handle); // cuBLAS
       run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC,
                  handle); // Executes the kernel, modifies the result matrix
@@ -111,7 +107,7 @@ int main(int argc, char **argv) {
       cudaMemcpy(C, dC, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
       cudaMemcpy(C_ref, dC_ref, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
 
-      if (!verify_matrix(C_ref, C, m * n)) {
+      if (!verify_matrix(C_ref, C, m * n, kernel_num)) {
         std::cout
             << "Failed to pass the correctness verification against NVIDIA "
                "cuBLAS."
