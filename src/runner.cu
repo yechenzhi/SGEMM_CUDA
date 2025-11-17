@@ -1059,6 +1059,284 @@ void run_bf16_warptiling(int M, int N, int K, float alpha, float *A, float *B,
       <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
 }
 
+void run_bf16_tensorcore(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+
+  constexpr int BM = 128;
+  constexpr int BN = 128;
+  constexpr int BK = 128; 
+
+  constexpr int WM = 32;
+  constexpr int WN = 64;
+
+  constexpr int TM = 16;
+  constexpr int TN = 16;
+  constexpr int TK = 16;
+  
+  constexpr int NUM_THREADS = 256;
+  constexpr int WARPS_PER_BLOCK = NUM_THREADS / 32;
+
+  constexpr int SHMEM_A_STRIDE = BK;
+  const size_t shmem_size_for_A = BM * SHMEM_A_STRIDE * sizeof(bf16);
+
+  
+  constexpr int SHMEM_B_STRIDE = BN;
+  const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
+  
+  
+  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  
+ 
+  const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+
+  int device;
+  cudaGetDevice(&device);
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device);
+  // if (sharedMemSizeInBytes > prop.sharedMemPerBlock) {
+  //   printf("Requested shared memory size (%zu bytes) exceeds device limit (%zu bytes).\n",
+  //          sharedMemSizeInBytes, prop.sharedMemPerBlock);
+  //   return;
+  // }
+
+  // 告诉CUDA运行时为这个内核函数预留更多的共享内存
+  // 这被称为 "opting in"
+  cudaFuncSetAttribute(bf16_sgemm_tensorcore<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, WARPS_PER_BLOCK>,
+                       cudaFuncAttributeMaxDynamicSharedMemorySize,
+                       sharedMemSizeInBytes);
+  
+  dim3 blockDim(NUM_THREADS);
+
+  dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
+
+  bf16_sgemm_tensorcore<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, WARPS_PER_BLOCK>
+      <<<gridDim, blockDim, sharedMemSizeInBytes>>>(
+          M, N, K, alpha, A, B, beta, C);
+}
+
+void run_bf16_wmma_simple(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+
+  constexpr int BM = 64;
+  constexpr int BN = 64;
+  constexpr int BK = 64;
+
+  constexpr int TM = 16;
+  constexpr int TN = 16;
+  constexpr int TK = 16;
+
+  constexpr int NUM_THREADS = 128 * 4;
+
+  //
+  constexpr int SHMEM_A_STRIDE = BK;
+  const size_t shmem_size_for_A = BM * SHMEM_A_STRIDE * sizeof(bf16);
+
+  
+  constexpr int SHMEM_B_STRIDE = BN;
+  const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
+  
+  
+  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  
+ 
+  const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+
+  int device;
+  cudaGetDevice(&device);
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device);
+  if (sharedMemSizeInBytes > prop.sharedMemPerBlock) {
+    printf("Requested shared memory size (%zu bytes) exceeds device limit (%zu bytes).\n",
+           sharedMemSizeInBytes, prop.sharedMemPerBlock);
+    return;
+  }
+
+  // 告诉CUDA运行时为这个内核函数预留更多的共享内存
+  // 这被称为 "opting in"
+  cudaFuncSetAttribute(bf16_wmma_simple<BM, BN, BK, TM, TN, TK, NUM_THREADS>,
+                       cudaFuncAttributeMaxDynamicSharedMemorySize,
+                       sharedMemSizeInBytes);
+  
+  dim3 gridDim;
+  dim3 blockDim;
+
+  blockDim.x = 128;
+  blockDim.y = 4;
+
+  gridDim.x = (M + (TM * (blockDim.x / WARPSIZE) - 1)) / (TM * (blockDim.x / WARPSIZE));
+  gridDim.y = (N + (TN * blockDim.y - 1)) / (TN * blockDim.y);
+
+  bf16_wmma_simple<BM, BN, BK, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim>>>(
+          M, N, K, alpha, A, B, beta, C);
+}
+
+void run_bf16_wmma_test(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+
+  constexpr int BM = 64;
+  constexpr int BN = 64;
+  constexpr int BK = 64;
+
+  constexpr int TM = 16;
+  constexpr int TN = 16;
+  constexpr int TK = 16;
+
+  constexpr int NUM_THREADS = 128 * 4;
+  
+  dim3 gridDim;
+  dim3 blockDim;
+
+  blockDim.x = 128;
+  blockDim.y = 4;
+
+  gridDim.x = (M + (TM * (blockDim.x / WARPSIZE) - 1)) / (TM * (blockDim.x / WARPSIZE));
+  gridDim.y = (N + (TN * blockDim.y - 1)) / (TN * blockDim.y);
+
+  bf16_wmma_test<BM, BN, BK, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim>>>(
+          M, N, K, alpha, A, B, beta, C);
+}
+
+void run_bf16_wmma_cshare(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+
+  constexpr int BM = 64;
+  constexpr int BN = 64;
+  constexpr int BK = 64;
+
+  constexpr int TM = 16;
+  constexpr int TN = 16;
+  constexpr int TK = 16;
+
+  constexpr int NUM_THREADS = 128 * 4;
+  
+  dim3 gridDim;
+  dim3 blockDim;
+
+  blockDim.x = 128;
+  blockDim.y = 4;
+
+  gridDim.x = (M + (TM * (blockDim.x / WARPSIZE) - 1)) / (TM * (blockDim.x / WARPSIZE));
+  gridDim.y = (N + (TN * blockDim.y - 1)) / (TN * blockDim.y);
+
+  bf16_wmma_cshare<BM, BN, BK, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim>>>(
+          M, N, K, alpha, A, B, beta, C);
+}
+
+void run_bf16_wmma_reuse(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+
+  constexpr int BM = 64;
+  constexpr int BN = 64;
+  constexpr int BK = 64;
+
+  constexpr int TM = 16;
+  constexpr int TN = 16;
+  constexpr int TK = 16;
+
+  constexpr int NUM_THREADS = 128 * 4;
+  constexpr int SHMEM_A_STRIDE = BK;
+  const size_t shmem_size_for_A = BM * SHMEM_A_STRIDE * sizeof(bf16);
+
+  
+  constexpr int SHMEM_B_STRIDE = BN;
+  const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
+  
+  
+  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  
+ 
+  const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+
+  int device;
+  cudaGetDevice(&device);
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device);
+  if (sharedMemSizeInBytes > prop.sharedMemPerBlock) {
+    printf("Requested shared memory size (%zu bytes) exceeds device limit (%zu bytes).\n",
+           sharedMemSizeInBytes, prop.sharedMemPerBlock);
+    return;
+  }
+
+  // 告诉CUDA运行时为这个内核函数预留更多的共享内存
+  // 这被称为 "opting in"
+  cudaFuncSetAttribute(bf16_wmma_reuse<BM, BN, BK, TM, TN, TK, NUM_THREADS>,
+                       cudaFuncAttributeMaxDynamicSharedMemorySize,
+                       sharedMemSizeInBytes);
+  
+  dim3 gridDim;
+  dim3 blockDim;
+
+  blockDim.x = 128;
+  blockDim.y = 4;
+
+  gridDim.x = (M + (TM * (blockDim.x / WARPSIZE) - 1)) / (TM * (blockDim.x / WARPSIZE));
+  gridDim.y = (N + (TN * blockDim.y - 1)) / (TN * blockDim.y);
+
+  bf16_wmma_reuse<BM, BN, BK, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
+          M, N, K, alpha, A, B, beta, C);
+}
+
+void run_bf16_wmma_warptiling(int M, int N, int K, float alpha, float *A, float *B,
+                        float beta, float *C) {
+
+  constexpr int BM = 128;
+  constexpr int BN = 128;
+  constexpr int BK = 128;
+  
+  constexpr int WM = 32;
+  constexpr int WN = 64;
+
+  constexpr int TM = 16;
+  constexpr int TN = 16;
+  constexpr int TK = 16;
+
+  constexpr int NUM_THREADS = 64 * 4;
+  constexpr int SHMEM_A_STRIDE = BK;
+  const size_t shmem_size_for_A = BM * SHMEM_A_STRIDE * sizeof(bf16);
+
+  
+  constexpr int SHMEM_B_STRIDE = BN;
+  const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
+  
+  
+  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  
+ 
+  const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+
+  int device;
+  cudaGetDevice(&device);
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device);
+  // if (sharedMemSizeInBytes > prop.sharedMemPerBlock) {
+  //   printf("Requested shared memory size (%zu bytes) exceeds device limit (%zu bytes).\n",
+  //          sharedMemSizeInBytes, prop.sharedMemPerBlock);
+  //   // return;
+  // }
+
+  // 告诉CUDA运行时为这个内核函数预留更多的共享内存
+  // 这被称为 "opting in"
+  cudaFuncSetAttribute(bf16_wmma_warptiling<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS>,
+                       cudaFuncAttributeMaxDynamicSharedMemorySize,
+                       sharedMemSizeInBytes);
+  
+  dim3 gridDim;
+  dim3 blockDim;
+
+  blockDim.x = 64;
+  blockDim.y = 4;
+
+  gridDim.x = (M + BM - 1) / BM;
+  gridDim.y = (N + BN - 1) / BN;
+
+  bf16_wmma_warptiling<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
+          M, N, K, alpha, A, B, beta, C);
+}
+
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A,
                 float *B, float beta, float *C, cublasHandle_t handle) {
   switch (kernel_num) {
@@ -1154,6 +1432,24 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A,
     break;
   case 30:
     run_bf16_warptiling(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 31:
+    run_bf16_tensorcore(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 32:
+    run_bf16_wmma_simple(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 33:
+    run_bf16_wmma_test(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 34:
+    run_bf16_wmma_cshare(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 35:
+    run_bf16_wmma_reuse(M, N, K, alpha, A, B, beta, C);
+    break;
+  case 36:
+    run_bf16_wmma_warptiling(M, N, K, alpha, A, B, beta, C);
     break;
   default:
     throw std::invalid_argument("Unknown kernel number");

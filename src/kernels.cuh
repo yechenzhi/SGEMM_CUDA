@@ -29,3 +29,11 @@
 #include "kernels/27_my_warptiling_pointer.cuh"
 #include "kernels/28_my_waptiling_device.cuh"
 #include "kernels/30_bf16_warptiling.cuh"
+#include "kernels/31_bf_tensorcore.cuh"
+#include "kernels/32_bf16_wmma_simple.cuh"
+#include "kernels/33_bf16_wmma_test.cuh"
+#include "kernels/34_bf16_wmma_cshare.cuh"
+#include "kernels/35_bf16_wmma_reuse.cuh"
+#include "kernels/36_bf16_wmma_warptiling.cuh"
+
+
