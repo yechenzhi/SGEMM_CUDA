@@ -7,6 +7,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <cuda_bf16.h>
 
 void cudaCheck(cudaError_t error, const char *file,
                int line); // CUDA error check
@@ -24,3 +25,7 @@ float cpu_elapsed_time(float &beg, float &end); // Calculate time difference
 
 void run_kernel(int kernel_num, int m, int n, int k, float alpha, float *A,
                 float *B, float beta, float *C, cublasHandle_t handle);
+
+void run_kernel(int kernel_num, int m, int n, int k, float alpha, 
+                __nv_bfloat16 *A, __nv_bfloat16 *B, 
+                float beta, float *C, cublasHandle_t handle);

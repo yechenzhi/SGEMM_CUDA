@@ -5,10 +5,18 @@
 #include <iostream>
 #include <runner.cuh>
 #include <vector>
+#include <cuda_bf16.h> 
 
 #define cudaCheck(err) (cudaCheck(err, __FILE__, __LINE__))
 
 const std::string errLogFile = "matrixValidationFailure.txt";
+
+__global__ void floatToBfloat16Kernel(const float* src, __nv_bfloat16* dst, long n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        dst[idx] = __float2bfloat16(src[idx]);
+    }
+}
 
 int main(int argc, char **argv) {
   if (argc != 2) {
@@ -19,10 +27,12 @@ int main(int argc, char **argv) {
 
   // get kernel number
   int kernel_num = std::stoi(argv[1]);
-  if (kernel_num < 0 || kernel_num >40) {
+  if (kernel_num < 0 || kernel_num >100) {
     std::cerr << "Please enter a valid kernel number (0-20)" << std::endl;
     exit(EXIT_FAILURE);
   }
+
+  bool use_bf16_input = (kernel_num > 37);
 
   // get environment variable for device
   int deviceIdx = 0;
@@ -32,7 +42,9 @@ int main(int argc, char **argv) {
   cudaCheck(cudaSetDevice(deviceIdx));
 
   printf("Running kernel %d on device %d.\n", kernel_num, deviceIdx);
-
+  if (use_bf16_input) {
+      printf("Using __nv_bfloat16 input matrices for A and B.\n");
+  }
   // print some device info
   // CudaDeviceInfo();
 
@@ -65,6 +77,7 @@ int main(int argc, char **argv) {
         *C_ref = nullptr; // host matrices
   float *dA = nullptr, *dB = nullptr, *dC = nullptr,
         *dC_ref = nullptr; // device matrices
+  __nv_bfloat16 *dA_bf16 = nullptr, *dB_bf16 = nullptr;
 
   A = (float *)malloc(sizeof(float) * max_size * max_size);
   B = (float *)malloc(sizeof(float) * max_size * max_size);
@@ -88,6 +101,21 @@ int main(int argc, char **argv) {
                        cudaMemcpyHostToDevice));
   cudaCheck(cudaMemcpy(dC_ref, C, sizeof(float) * max_size * max_size,
                        cudaMemcpyHostToDevice));
+  
+  if (use_bf16_input) {
+      cudaCheck(cudaMalloc((void **)&dA_bf16, sizeof(__nv_bfloat16) * max_size * max_size));
+      cudaCheck(cudaMalloc((void **)&dB_bf16, sizeof(__nv_bfloat16) * max_size * max_size));
+
+      int block = 256;
+      int grid = (max_size * max_size + block - 1) / block;
+
+      // 调用转换 Kernel
+      floatToBfloat16Kernel<<<grid, block>>>(dA, dA_bf16, max_size * max_size);
+      floatToBfloat16Kernel<<<grid, block>>>(dB, dB_bf16, max_size * max_size);
+      
+      cudaCheck(cudaGetLastError());
+      cudaCheck(cudaDeviceSynchronize());
+  }
 
   int repeat_times = 50;
   for (int size : SIZE) {
@@ -97,11 +125,14 @@ int main(int argc, char **argv) {
               << ", beta: " << beta << std::endl;
     // Verify the correctness of the calculation, and execute it once before the
     // kernel function timing to avoid cold start errors
-    if (kernel_num != 0 && kernel_num != 29) {
+    if (kernel_num != 0 && kernel_num != 29 && kernel_num !=38) {
       run_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref,
                  handle); // cuBLAS
-      run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC,
-                 handle); // Executes the kernel, modifies the result matrix
+      if (use_bf16_input) {
+          run_kernel(kernel_num, m, n, k, alpha, dA_bf16, dB_bf16, beta, dC, handle);
+      } else {
+          run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+      }
       cudaCheck(cudaDeviceSynchronize());
       cudaCheck(cudaGetLastError()); // Check for async errors during kernel run
       cudaMemcpy(C, dC, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
@@ -132,7 +163,12 @@ int main(int argc, char **argv) {
     cudaEventRecord(beg);
     for (int j = 0; j < repeat_times; j++) {
       // We don't reset dC between runs to save time
-      run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+      // run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+      if (use_bf16_input) {
+          run_kernel(kernel_num, m, n, k, alpha, dA_bf16, dB_bf16, beta, dC, handle);
+      } else {
+          run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+      }
     }
     cudaEventRecord(end);
     cudaEventSynchronize(beg);

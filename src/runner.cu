@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <fstream>
 #include <iomanip>
+#include <cuda_bf16.h> 
 
 float get_sec() {
   struct timeval time;
@@ -147,12 +148,12 @@ void runCublasBF16(cublasHandle_t handle, int M, int N, int K, float alpha,
 }
 
 void runCublasBF16_AB(cublasHandle_t handle, int M, int N, int K, float alpha,
-                   float *A, float *B, float beta, float *C) {
+                   __nv_bfloat16 *A, __nv_bfloat16 *B, float beta, float *C) {
   // This runs cuBLAS with mixed precision (performing the mul with operands
   // downcast to bf16), which is ~4x faster
-  cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, B, CUDA_R_32F,
-               N, A, CUDA_R_32F, K, &beta, C, CUDA_R_32F, N,
-               CUBLAS_COMPUTE_32F_FAST_16BF, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+  cublasGemmEx(handle, CUBLAS_OP_N, CUBLAS_OP_N, N, M, K, &alpha, B, CUDA_R_16BF,
+               N, A, CUDA_R_16BF, K, &beta, C, CUDA_R_32F, N,
+               CUBLAS_COMPUTE_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 }
 
 void runCublasTF32(cublasHandle_t handle, int M, int N, int K, float alpha,
@@ -1523,5 +1524,17 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A,
     break;
   default:
     throw std::invalid_argument("Unknown kernel number");
+  }
+}
+
+void run_kernel(int kernel_num, int M, int N, int K, float alpha, 
+                __nv_bfloat16 *A, __nv_bfloat16 *B, 
+                float beta, float *C, cublasHandle_t handle) {
+  switch (kernel_num) {
+    case 38:
+      runCublasBF16_AB(handle, M, N, K, alpha, A, B, beta, C);
+      break;
+    default:
+      throw std::invalid_argument("Unknown BF16 kernel number or kernel does not support BF16 input.");
   }
 }
