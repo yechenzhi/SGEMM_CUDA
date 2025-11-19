@@ -1585,6 +1585,64 @@ void run_bf16AB_wmma(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bf
           M, N, K, alpha, A, B, beta, C);
 }
 
+void run_bf16AB_wmma_async(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bfloat16 *B,
+                        float beta, float *C) {
+
+  constexpr int BM = 128;
+  constexpr int BN = 128;
+  constexpr int BK = 128;
+  
+  constexpr int WM = 32;
+  constexpr int WN = 64;
+
+  constexpr int TM = 16;
+  constexpr int TN = 16;
+  constexpr int TK = 16;
+
+  constexpr int NUM_THREADS = 64 * 4;
+  constexpr int SHMEM_A_STRIDE = BK;
+  const size_t shmem_size_for_A = BM * SHMEM_A_STRIDE * sizeof(bf16);
+
+  
+  constexpr int SHMEM_B_STRIDE = BN;
+  const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
+  
+  
+  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  
+ 
+  const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+
+  int device;
+  cudaGetDevice(&device);
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device);
+  // if (sharedMemSizeInBytes > prop.sharedMemPerBlock) {
+  //   printf("Requested shared memory size (%zu bytes) exceeds device limit (%zu bytes).\n",
+  //          sharedMemSizeInBytes, prop.sharedMemPerBlock);
+  //   // return;
+  // }
+
+  // 告诉CUDA运行时为这个内核函数预留更多的共享内存
+  // 这被称为 "opting in"
+  cudaFuncSetAttribute(bf16AB_wmma_warptiling<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS>,
+                       cudaFuncAttributeMaxDynamicSharedMemorySize,
+                       sharedMemSizeInBytes);
+  
+  dim3 gridDim;
+  dim3 blockDim;
+
+  blockDim.x = 64;
+  blockDim.y = 4;
+
+  gridDim.x = (M + BM - 1) / BM;
+  gridDim.y = (N + BN - 1) / BN;
+
+  bf16AB_wmma_warptiling<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
+          M, N, K, alpha, A, B, beta, C);
+}
+
 
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, 
                 __nv_bfloat16 *A, __nv_bfloat16 *B, 
@@ -1595,6 +1653,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha,
       break;
     case 39:
       run_bf16AB_wmma(M, N, K, alpha, A, B, beta, C);
+      break;
+    case 40:
+      run_bf16AB_wmma_async(M, N, K, alpha, A, B, beta, C);
       break;
     default:
       throw std::invalid_argument("Unknown BF16 kernel number or kernel does not support BF16 input.");
