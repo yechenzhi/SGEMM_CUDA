@@ -36,3 +36,4 @@
 #include "kernels/35_bf16_wmma_reuse.cuh"
 #include "kernels/36_bf16_wmma_warptiling.cuh"
 #include "kernels/37_bf16_float2.cuh"
+#include "kernels/39_bf16AB_wmma.cuh"
