@@ -1589,8 +1589,8 @@ void run_bf16AB_wmma_async(int M, int N, int K, float alpha, __nv_bfloat16 *A, _
                         float beta, float *C) {
 
   constexpr int BM = 128;
-  constexpr int BN = 128;
-  constexpr int BK = 128;
+  constexpr int BN = 64;
+  constexpr int BK = 32;
   
   constexpr int WM = 32;
   constexpr int WN = 64;
@@ -1599,7 +1599,7 @@ void run_bf16AB_wmma_async(int M, int N, int K, float alpha, __nv_bfloat16 *A, _
   constexpr int TN = 16;
   constexpr int TK = 16;
 
-  constexpr int NUM_THREADS = 64 * 4;
+  constexpr int NUM_THREADS = 64 * 2;
   constexpr int SHMEM_A_STRIDE = BK;
   const size_t shmem_size_for_A = BM * SHMEM_A_STRIDE * sizeof(bf16);
 
@@ -1634,7 +1634,7 @@ void run_bf16AB_wmma_async(int M, int N, int K, float alpha, __nv_bfloat16 *A, _
   dim3 blockDim;
 
   blockDim.x = 64;
-  blockDim.y = 4;
+  blockDim.y = 2;
 
   gridDim.x = (M + BM - 1) / BM;
   gridDim.y = (N + BN - 1) / BN;
@@ -1670,7 +1670,7 @@ void run_bf16AB_wmma_double_buffer(int M, int N, int K, float alpha, __nv_bfloat
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(2 * required_shmem_for_AB, shmem_size_for_CD);
 
   int device;
   cudaGetDevice(&device);
