@@ -109,7 +109,7 @@ bool verify_matrix(float *matRef, float *matOut, int N, int kernel_num) {
   double threshold = 0.01;
   if (kernel_num > 29) {
     // bf16 warptiling needs a higher threshold
-    threshold = 10.0f;
+    threshold = 5.0f;
   }
   int i;
   for (i = 0; i < N; i++) {
