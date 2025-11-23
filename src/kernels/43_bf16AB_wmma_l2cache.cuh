@@ -101,6 +101,7 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
   const uint cCol_start = warp_col * WN;
 
   pipe.producer_acquire();
+#pragma unroll
   for(uint row_offset = 0; row_offset < BM; row_offset += stride_Cs) {
         const float* src_ptr = &C[(row_offset + cs_row) * N + cs_col * 4];
         float* dst_ptr = &Cs[(row_offset + cs_row) * BN + cs_col * 4];
@@ -109,9 +110,10 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
   pipe.producer_commit(); 
   cuda::pipeline_consumer_wait_prior<0>(pipe);
   __syncthreads();
-
+#pragma unroll
   for(uint i = 0; i < TILES_PER_WARP_COL; i++){
     for(uint j = 0; j < TILES_PER_WARP_ROW; j++){
+#pragma unroll
         const uint tile_pos = (cRow_start + i * TM) * ldc + cCol_start + j * TN;
         wmma::load_matrix_sync(c_frag[i][j], &Cs[tile_pos], ldc, wmma::mem_row_major);
     }
@@ -119,7 +121,9 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
   pipe.consumer_release();
   __syncthreads();
 
+#pragma unroll
   for(uint i = 0; i < TILES_PER_WARP_COL; i++){
+#pragma unroll
     for(uint j = 0; j < TILES_PER_WARP_ROW; j++){
         for (int t = 0; t < c_frag[i][j].num_elements; t++) {
             c_frag[i][j].x[t] *= beta;
@@ -128,19 +132,22 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
   }
   
   int num_batches = CEIL_DIV(K, BK);
-
+#pragma unroll
   for(uint compute_batch = 0, fetch_batch = 0; compute_batch < num_batches; ++compute_batch){
+#pragma unroll
     for(; fetch_batch < compute_batch + stages_count && fetch_batch < num_batches; ++fetch_batch){
         bf16* As = As_ptr_base + (fetch_batch % stages_count) * As_stage_offset;
         bf16* Bs = Bs_ptr_base + (fetch_batch % stages_count) * Bs_stage_offset;
         
         // load A and B to shared memory
         pipe.producer_acquire();
+#pragma unroll
         for(uint row_offset = 0; row_offset < BM; row_offset += stride_As) {
             const bf16* src_ptr = &A_global_base[(row_offset + as_row) * K + (fetch_batch * BK + as_col * COPY_SIZE_BF16)];
             bf16* dst_ptr = &As[(row_offset + as_row) * (BK + SKEW_BF16) + as_col * COPY_SIZE_BF16];
             cuda::memcpy_async(dst_ptr, src_ptr, shape16, pipe);
         }
+#pragma unroll
         for(uint row_offset = 0; row_offset < BK; row_offset += stride_Bs) {
             const bf16* src_ptr = &B_global_base[(fetch_batch * BK + row_offset + bs_row) * N + bs_col * COPY_SIZE_BF16];
             bf16* dst_ptr = &Bs[(row_offset + bs_row) * (BN + SKEW_BF16) + bs_col * COPY_SIZE_BF16];
@@ -153,6 +160,7 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
 
     const bf16* As = As_ptr_base + (compute_batch % stages_count) * As_stage_offset;
     const bf16* Bs = Bs_ptr_base + (compute_batch % stages_count) * Bs_stage_offset;
+#pragma unroll
     for(uint k_inner = 0; k_inner < BK; k_inner += TK) {
         const uint lda = BK + SKEW_BF16;
         const uint ldb = BN + SKEW_BF16;
@@ -161,9 +169,10 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
         const uint aCol_start = k_inner;
         const uint bRow_start = k_inner;
         const uint bCol_start = warp_col * WN;
-    
+#pragma unroll
         for(uint i = 0; i < TILES_PER_WARP_COL; i++){
             wmma::load_matrix_sync(a_frag[i], &As[(aRow_start + i * TM) * lda + aCol_start], lda);
+#pragma unroll
             for(uint j = 0; j < TILES_PER_WARP_ROW; j++){
                 if(i==0){
                     wmma::load_matrix_sync(b_frag[j], &Bs[bRow_start * ldb + bCol_start + j * TN], ldb);
@@ -177,8 +186,11 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
   }
 
   // store the D fragements to shared memory
+#pragma unroll
   for(uint i = 0; i < TILES_PER_WARP_COL; i++){
+#pragma unroll
     for(uint j = 0; j < TILES_PER_WARP_ROW; j++){
+#pragma unroll
         for (int t = 0; t < c_frag[i][j].num_elements; t++)
             c_frag[i][j].x[t] *= alpha; 
         const uint tile_pos = (cRow_start + i * TM) * ldc + cCol_start + j * TN;
@@ -186,7 +198,7 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
     }
   }
   __syncthreads();
-  
+#pragma unroll
   for(uint row_offset = 0; row_offset < BM; row_offset += stride_Cs) {
         float4 tmp =
             reinterpret_cast<const float4 *>(&Cs[(row_offset + cs_row) * BN + cs_col * 4])[0];
