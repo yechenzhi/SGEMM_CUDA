@@ -39,3 +39,4 @@
 #include "kernels/39_bf16AB_wmma.cuh"
 #include "kernels/40_bf16AB_wmma_async.cuh"
 #include "kernels/41_bf16AB_wmma_double_buffer.cuh"
+#include "kernels/42_bf16AB_wmma_bank_conflict.cuh"

@@ -1648,7 +1648,7 @@ void run_bf16AB_wmma_double_buffer(int M, int N, int K, float alpha, __nv_bfloat
 
   constexpr int BM = 128;
   constexpr int BN = 64;
-  constexpr int BK = 32;
+  constexpr int BK = 64;
   
   constexpr int WM = 32;
   constexpr int WN = 64;
@@ -1701,6 +1701,67 @@ void run_bf16AB_wmma_double_buffer(int M, int N, int K, float alpha, __nv_bfloat
           M, N, K, alpha, A, B, beta, C);
 }
 
+void run_bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bfloat16 *B,
+                        float beta, float *C) {
+
+  constexpr int BM = 128;
+  constexpr int BN = 64;
+  constexpr int BK = 64;
+  
+  constexpr int WM = 32;
+  constexpr int WN = 64;
+
+  constexpr int TM = 16;
+  constexpr int TN = 16;
+  constexpr int TK = 16;
+
+  constexpr int SKEW_BF16 = 16; 
+
+  constexpr int NUM_THREADS = 64 * 2;
+  constexpr int SHMEM_A_STRIDE = BK + SKEW_BF16;
+  const size_t shmem_size_for_A = BM * SHMEM_A_STRIDE * sizeof(bf16);
+
+  
+  constexpr int SHMEM_B_STRIDE = BN + SKEW_BF16;
+  const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
+  
+  
+  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  
+ 
+  const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
+  const size_t sharedMemSizeInBytes = std::max(2 * required_shmem_for_AB, shmem_size_for_CD);
+
+  int device;
+  cudaGetDevice(&device);
+  cudaDeviceProp prop;
+  cudaGetDeviceProperties(&prop, device);
+  // if (sharedMemSizeInBytes > prop.sharedMemPerBlock) {
+  //   printf("Requested shared memory size (%zu bytes) exceeds device limit (%zu bytes).\n",
+  //          sharedMemSizeInBytes, prop.sharedMemPerBlock);
+  //   // return;
+  // }
+
+  // 告诉CUDA运行时为这个内核函数预留更多的共享内存
+  // 这被称为 "opting in"
+  cudaFuncSetAttribute(bf16AB_wmma_bank_conflict<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, SKEW_BF16>,
+                       cudaFuncAttributeMaxDynamicSharedMemorySize,
+                       sharedMemSizeInBytes);
+  
+  dim3 gridDim;
+  dim3 blockDim;
+
+  blockDim.x = 64;
+  blockDim.y = 2;
+
+  gridDim.x = (M + BM - 1) / BM;
+  gridDim.y = (N + BN - 1) / BN;
+
+  bf16AB_wmma_bank_conflict<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, SKEW_BF16><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
+          M, N, K, alpha, A, B, beta, C);
+}
+
+
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, 
                 __nv_bfloat16 *A, __nv_bfloat16 *B, 
                 float beta, float *C, cublasHandle_t handle) {
@@ -1716,6 +1777,9 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha,
       break;
     case 41:
       run_bf16AB_wmma_double_buffer(M, N, K, alpha, A, B, beta, C);
+      break;
+    case 42:
+      run_bf16AB_wmma_bank_conflict(M, N, K, alpha, A, B, beta, C);
       break;
     default:
       throw std::invalid_argument("Unknown BF16 kernel number or kernel does not support BF16 input.");
