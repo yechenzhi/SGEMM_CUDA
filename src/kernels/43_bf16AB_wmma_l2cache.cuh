@@ -25,11 +25,11 @@ MxK(row major) * KxN(row major) = MxN
 */
 
 template <const int BM, const int BN, const int BK,const int WM, const int WN, const int TM, const int TN, const int TK,
-          const int NUM_THREADS, const int SKEW_BF16, const int GROUP_SIZE_M>
+          const int NUM_THREADS, const int SKEW_BF16, const int GROUP_SIZE_M, const int STAGR_COUNT>
 __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16 *A,
                             const bf16 *B, float beta, float *C) {
 
-  constexpr int stages_count = 2;
+  
   cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
   const auto shape16 = cuda::aligned_size_t<16>(16);
 
@@ -89,7 +89,7 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
   const uint As_stage_offset = BM * (BK + SKEW_BF16); 
   const uint Bs_stage_offset = BK * (BN + SKEW_BF16);
   bf16* As_ptr_base = (bf16*)shem; 
-  bf16* Bs_ptr_base = As_ptr_base + stages_count * As_stage_offset;
+  bf16* Bs_ptr_base = As_ptr_base + STAGR_COUNT * As_stage_offset;
   float* Cs = (float*)shem;
 
   const bf16* A_global_base = A + row_start_block * K;
@@ -135,9 +135,9 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
 #pragma unroll
   for(uint compute_batch = 0, fetch_batch = 0; compute_batch < num_batches; ++compute_batch){
 #pragma unroll
-    for(; fetch_batch < compute_batch + stages_count && fetch_batch < num_batches; ++fetch_batch){
-        bf16* As = As_ptr_base + (fetch_batch % stages_count) * As_stage_offset;
-        bf16* Bs = Bs_ptr_base + (fetch_batch % stages_count) * Bs_stage_offset;
+    for(; fetch_batch < compute_batch + STAGR_COUNT && fetch_batch < num_batches; ++fetch_batch){
+        bf16* As = As_ptr_base + (fetch_batch % STAGR_COUNT) * As_stage_offset;
+        bf16* Bs = Bs_ptr_base + (fetch_batch % STAGR_COUNT) * Bs_stage_offset;
         
         // load A and B to shared memory
         pipe.producer_acquire();
@@ -155,11 +155,11 @@ __global__ void bf16AB_wmma_l2cache(int M, int N, int K, float alpha, const bf16
         }
         pipe.producer_commit(); 
     }
-    cuda::pipeline_consumer_wait_prior<stages_count-1>(pipe);
+    cuda::pipeline_consumer_wait_prior<STAGR_COUNT-1>(pipe);
     __syncthreads();
 
-    const bf16* As = As_ptr_base + (compute_batch % stages_count) * As_stage_offset;
-    const bf16* Bs = Bs_ptr_base + (compute_batch % stages_count) * Bs_stage_offset;
+    const bf16* As = As_ptr_base + (compute_batch % STAGR_COUNT) * As_stage_offset;
+    const bf16* Bs = Bs_ptr_base + (compute_batch % STAGR_COUNT) * Bs_stage_offset;
 #pragma unroll
     for(uint k_inner = 0; k_inner < BK; k_inner += TK) {
         const uint lda = BK + SKEW_BF16;

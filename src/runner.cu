@@ -1777,6 +1777,7 @@ void run_bf16AB_wmma_l2cache(int M, int N, int K, float alpha, __nv_bfloat16 *A,
 
   constexpr int SKEW_BF16 = 16; 
   constexpr int GROUP_SIZE_M = 4; 
+  constexpr int STAGR_COUNT = 3;
 
   constexpr int NUM_THREADS = 64 * 2;
   constexpr int SHMEM_A_STRIDE = BK + SKEW_BF16;
@@ -1791,7 +1792,7 @@ void run_bf16AB_wmma_l2cache(int M, int N, int K, float alpha, __nv_bfloat16 *A,
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(2 * required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(STAGR_COUNT * required_shmem_for_AB, shmem_size_for_CD);
 
   int device;
   cudaGetDevice(&device);
@@ -1805,7 +1806,7 @@ void run_bf16AB_wmma_l2cache(int M, int N, int K, float alpha, __nv_bfloat16 *A,
 
   // 告诉CUDA运行时为这个内核函数预留更多的共享内存
   // 这被称为 "opting in"
-  cudaFuncSetAttribute(bf16AB_wmma_l2cache<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, SKEW_BF16, GROUP_SIZE_M>,
+  cudaFuncSetAttribute(bf16AB_wmma_l2cache<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, SKEW_BF16, GROUP_SIZE_M, STAGR_COUNT>,
                        cudaFuncAttributeMaxDynamicSharedMemorySize,
                        sharedMemSizeInBytes);
   
@@ -1817,7 +1818,7 @@ void run_bf16AB_wmma_l2cache(int M, int N, int K, float alpha, __nv_bfloat16 *A,
 
   gridDim.x = (M + BM - 1) / BM * ((N + BN - 1) / BN);
 
-  bf16AB_wmma_l2cache<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, SKEW_BF16, GROUP_SIZE_M><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
+  bf16AB_wmma_l2cache<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, SKEW_BF16, GROUP_SIZE_M, STAGR_COUNT><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
           M, N, K, alpha, A, B, beta, C);
 }
 
