@@ -189,7 +189,7 @@ void run_sgemm_coalesce(int M, int N, int K, float alpha, float *A, float *B,
 
 void run_my_sgemm_coalesce(int M, int N, int K, float alpha, float *A, float *B,
                      float beta, float *D) {
-  dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
+  dim3 gridDim(CEIL_DIV(N, 32), CEIL_DIV(M, 32));
   dim3 blockDim(32, 32);
   my_sgemm_global_mem_coalesce<<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
