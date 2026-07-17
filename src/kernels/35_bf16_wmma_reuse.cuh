@@ -51,7 +51,7 @@ namespace bf16_reuse{
 template <const int BM, const int BN, const int BK, const int TM, const int TN, const int TK,
           const int NUM_THREADS>
 __global__ void bf16_wmma_reuse(int M, int N, int K, float alpha, const float *A,
-                            const float *B, float beta, float *C) {
+                            const float *B, float beta, float *D) {
   beta /= alpha;
   const uint tid = threadIdx.y * blockDim.x + threadIdx.x;
   const uint row_start_block = blockIdx.x * BM;
@@ -64,9 +64,9 @@ __global__ void bf16_wmma_reuse(int M, int N, int K, float alpha, const float *A
   const uint bs_row = tid / (BN / 4);
   const uint bs_col = tid % (BN / 4);
   const uint stride_Bs = NUM_THREADS / (BN / 4);
-  const uint cs_row = tid / (BN / 4);
-  const uint cs_col = tid % (BN / 4);
-  const uint stride_Cs = NUM_THREADS / (BN / 4);
+  const uint ds_row = tid / (BN / 4);
+  const uint ds_col = tid % (BN / 4);
+  const uint stride_Ds = NUM_THREADS / (BN / 4);
   
   //used for computing wmma within the warptile
   //here we simply use 4 * 4 warptiles with a block
@@ -81,24 +81,24 @@ __global__ void bf16_wmma_reuse(int M, int N, int K, float alpha, const float *A
   extern __shared__ char shem[];
   bf16* As = (bf16*)shem;
   bf16* Bs = As + BM * BK;
-  float* Cs = (float*)shem;
+  float* Ds = (float*)shem;
 
   A += row_start_block * K;
   B += col_start_block;
-  C += row_start_block * N + col_start_block;
+  D += row_start_block * N + col_start_block;
 
   const uint ldc = BN;
-  const uint cRow = warp_row * TM;
-  const uint cCol = warp_col * TN;
+  const uint dRow = warp_row * TM;
+  const uint dCol = warp_col * TN;
 
-  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Cs) {
+  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Ds) {
         float4 tmp_fp32 =
-            reinterpret_cast<const float4 *>(&C[(row_offset + cs_row) * N + cs_col * 4])[0];
-        reinterpret_cast<float4*>(&Cs[(row_offset + cs_row) * BN + cs_col * 4])[0] = tmp_fp32;
+            reinterpret_cast<const float4 *>(&D[(row_offset + ds_row) * N + ds_col * 4])[0];
+        reinterpret_cast<float4*>(&Ds[(row_offset + ds_row) * BN + ds_col * 4])[0] = tmp_fp32;
   }
    __syncthreads();
 
-  wmma::load_matrix_sync(c_frag, &Cs[cRow * ldc + cCol], ldc, wmma::mem_row_major);
+  wmma::load_matrix_sync(c_frag, &Ds[dRow * ldc + dCol], ldc, wmma::mem_row_major);
   __syncthreads();
 
   for (int t = 0; t < c_frag.num_elements; t++) {
@@ -134,13 +134,12 @@ __global__ void bf16_wmma_reuse(int M, int N, int K, float alpha, const float *A
   // store the D fragements to shared memory
   for (int t = 0; t < c_frag.num_elements; t++)
     c_frag.x[t] *= alpha;  
-  wmma::store_matrix_sync(&Cs[cRow * ldc + cCol], c_frag, ldc, wmma::mem_row_major);
+  wmma::store_matrix_sync(&Ds[dRow * ldc + dCol], c_frag, ldc, wmma::mem_row_major);
   __syncthreads();
   
-  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Cs) {
+  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Ds) {
         float4 tmp =
-            reinterpret_cast<const float4 *>(&Cs[(row_offset + cs_row) * BN + cs_col * 4])[0];
-        reinterpret_cast<float4*>(&C[(row_offset + cs_row) * N + cs_col * 4])[0] = tmp;
+            reinterpret_cast<const float4 *>(&Ds[(row_offset + ds_row) * BN + ds_col * 4])[0];
+        reinterpret_cast<float4*>(&D[(row_offset + ds_row) * N + ds_col * 4])[0] = tmp;
     }
 }
-

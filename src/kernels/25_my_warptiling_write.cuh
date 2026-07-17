@@ -14,7 +14,7 @@ template <const int BM, const int BN, const int BK, const int WM, const int WN,
 __global__ void __launch_bounds__(NUM_THREADS) 
     my_sgemmWarptiling_write(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
-                                       float beta, float *C) {
+                                       float beta, float *D) {
   const int row_start_block = blockIdx.y * BM;
   const int col_start_block = blockIdx.x * BN;
   
@@ -105,13 +105,13 @@ __global__ void __launch_bounds__(NUM_THREADS)
           const int tid_start_col = warp_start_col + wn_iter * WNSUB + col_in_warp * TN;
           for (int tmIdx = 0; tmIdx < TM; ++tmIdx) {
               for (int tnIdx = 0; tnIdx < TN; tnIdx += 4) {
-                  float4 tmp = reinterpret_cast<float4 *>(&C[ (tid_start_row + tmIdx) * N + tid_start_col + tnIdx])[0];
+                  float4 tmp = reinterpret_cast<float4 *>(&D[ (tid_start_row + tmIdx) * N + tid_start_col + tnIdx])[0];
                   tmp.x = alpha * threadResults[wm_iter * TM + tmIdx][wn_iter * TN + tnIdx + 0] + beta * tmp.x;
                   tmp.y = alpha * threadResults[wm_iter * TM + tmIdx][wn_iter * TN + tnIdx + 1] + beta * tmp.y;
                   tmp.z = alpha * threadResults[wm_iter * TM + tmIdx][wn_iter * TN + tnIdx + 2] + beta * tmp.z;
                   tmp.w = alpha * threadResults[wm_iter * TM + tmIdx][wn_iter * TN + tnIdx + 3] + beta * tmp.w;
                   reinterpret_cast<float4 *>(
-                      &C[(tid_start_row + tmIdx) * N + (tid_start_col + tnIdx)])[0] = tmp;
+                      &D[(tid_start_row + tmIdx) * N + (tid_start_col + tnIdx)])[0] = tmp;
               }
           }
       }

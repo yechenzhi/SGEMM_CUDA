@@ -80,7 +80,7 @@ template <const int BM, const int BN, const int BK, const int WM, const int WN,
 __global__ void __launch_bounds__(NUM_THREADS) 
     bf16_sgemmWarptiling(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
-                                       float beta, float *C) {
+                                       float beta, float *D) {
   const uint row_start_block = blockIdx.y * BM;
   const uint col_start_block = blockIdx.x * BN;
   
@@ -115,7 +115,7 @@ __global__ void __launch_bounds__(NUM_THREADS)
 
   A += row_start_block * K;
   B += col_start_block;
-  C += (row_start_block + warpRow * WM) * N + col_start_block + warpCol * WN;
+  D += (row_start_block + warpRow * WM) * N + col_start_block + warpCol * WN;
 
 
   for (uint bkIdx = 0; bkIdx < K; bkIdx += BK) {
@@ -134,14 +134,14 @@ __global__ void __launch_bounds__(NUM_THREADS)
 
   for(uint wm_iter = 0; wm_iter < WMITER; ++wm_iter) {
       for(uint wn_iter = 0; wn_iter < WNITER; ++wn_iter) {
-          float *C_interim = C + (wm_iter * WMSUB) * N + (wn_iter * WNSUB);
-        //   float *C_interim = C + (wm_iter * WMSUB + row_in_warp * TM) * N + wn_iter * WNSUB + col_in_warp * TN;
+          float *D_interim = D + (wm_iter * WMSUB) * N + (wn_iter * WNSUB);
+        //   float *D_interim = D + (wm_iter * WMSUB + row_in_warp * TM) * N + wn_iter * WNSUB + col_in_warp * TN;
           for (uint tmIdx = 0; tmIdx < TM; ++tmIdx) {
               for (uint tnIdx = 0; tnIdx < TN; tnIdx += 4) {
 
-                //   float4 tmp = reinterpret_cast<float4 *>(&C_interim[tmIdx * N + tnIdx])[0];
+                //   float4 tmp = reinterpret_cast<float4 *>(&D_interim[tmIdx * N + tnIdx])[0];
                   float4 tmp = reinterpret_cast<float4 *>(
-                    &C_interim[(row_in_warp * TM + tmIdx) * N + (col_in_warp * TN + tnIdx)])[0];
+                    &D_interim[(row_in_warp * TM + tmIdx) * N + (col_in_warp * TN + tnIdx)])[0];
                   const int i = (wm_iter * TM + tmIdx) * (WNITER * TN) + wn_iter * TN + tnIdx;
 
                   tmp.x = alpha * threadResults[i + 0] + beta * tmp.x;
@@ -149,7 +149,7 @@ __global__ void __launch_bounds__(NUM_THREADS)
                   tmp.z = alpha * threadResults[i + 2] + beta * tmp.z;
                   tmp.w = alpha * threadResults[i + 3] + beta * tmp.w;
                   reinterpret_cast<float4 *>(
-                    &C_interim[(row_in_warp * TM + tmIdx) * N + (col_in_warp * TN + tnIdx)])[0] = tmp;
+                    &D_interim[(row_in_warp * TM + tmIdx) * N + (col_in_warp * TN + tnIdx)])[0] = tmp;
               }
           }
       }

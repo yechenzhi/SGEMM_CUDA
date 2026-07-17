@@ -11,7 +11,7 @@
 template <const int BM, const int BN, const int BK, const int TM>
 __global__ void my_sgemm1DBlocktiling(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
-                                       float beta, float *C) {
+                                       float beta, float *D) {
   const int row_start = blockIdx.y * BM + threadIdx.y * TM;
   const int col = blockIdx.x * BN + threadIdx.x;
   
@@ -65,7 +65,7 @@ __global__ void my_sgemm1DBlocktiling(int M, int N, int K, float alpha,
   }
 
   for (uint resIdx = 0; resIdx < TM; ++resIdx) {
-    C[(row_start + resIdx) * N + col] =
-        alpha * threadResults[resIdx] + beta * C[(row_start + resIdx) * N + col];
+    D[(row_start + resIdx) * N + col] =
+        alpha * threadResults[resIdx] + beta * D[(row_start + resIdx) * N + col];
   }
 }

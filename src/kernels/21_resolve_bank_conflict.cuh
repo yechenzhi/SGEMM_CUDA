@@ -35,7 +35,7 @@ __device__ __forceinline__ int swizzle_col_fast(int col, int row_k) {
 template <const int BM, const int BN, const int BK, const int TM, const int TN>
 __global__ void my_sgemmResolveBankConflicts(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
-                                       float beta, float *C) {
+                                       float beta, float *D) {
   const int row_start = blockIdx.y * BM + threadIdx.y * TM;
   const int col_start = blockIdx.x * BN + threadIdx.x * TN;
   
@@ -97,20 +97,20 @@ __global__ void my_sgemmResolveBankConflicts(int M, int N, int K, float alpha,
 
 //   for (int tmIdx = 0; tmIdx < TM; ++tmIdx) {
 //         for (int tnIdx = 0; tnIdx < TN; ++tnIdx) {
-//             C[(row_start + tmIdx) * N + (col_start + tnIdx)] =
-//             alpha * threadResults[tmIdx][tnIdx] + beta * C[(row_start + tmIdx) * N + (col_start + tnIdx)];  
+//             D[(row_start + tmIdx) * N + (col_start + tnIdx)] =
+//             alpha * threadResults[tmIdx][tnIdx] + beta * D[(row_start + tmIdx) * N + (col_start + tnIdx)];
 //         }
 //     } 
   for (int tmIdx = 0; tmIdx < TM; ++tmIdx) {
         for (int tnIdx = 0; tnIdx < TN; tnIdx += 4) {
             float4 tmp = reinterpret_cast<float4 *>(
-                &C[(row_start + tmIdx) * N + (col_start + tnIdx)])[0];
+                &D[(row_start + tmIdx) * N + (col_start + tnIdx)])[0];
             tmp.x = alpha * threadResults[tmIdx][tnIdx + 0] + beta * tmp.x;
             tmp.y = alpha * threadResults[tmIdx][tnIdx + 1] + beta * tmp.y;
             tmp.z = alpha * threadResults[tmIdx][tnIdx + 2] + beta * tmp.z;
             tmp.w = alpha * threadResults[tmIdx][tnIdx + 3] + beta * tmp.w;
             reinterpret_cast<float4 *>(
-                &C[(row_start + tmIdx) * N + (col_start + tnIdx)])[0] = tmp;   
+                &D[(row_start + tmIdx) * N + (col_start + tnIdx)])[0] = tmp;
         }
     }
 }

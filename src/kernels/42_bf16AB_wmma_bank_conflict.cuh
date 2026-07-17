@@ -27,7 +27,7 @@ MxK(row major) * KxN(row major) = MxN
 template <const int BM, const int BN, const int BK,const int WM, const int WN, const int TM, const int TN, const int TK,
           const int NUM_THREADS, const int SKEW_BF16>
 __global__ void bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, const bf16 *A,
-                            const bf16 *B, float beta, float *C) {
+                            const bf16 *B, float beta, float *D) {
 
   constexpr int stages_count = 2;
   cuda::pipeline<cuda::thread_scope_thread> pipe = cuda::make_pipeline();
@@ -45,9 +45,9 @@ __global__ void bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, cons
   const uint bs_row = tid / (BN / COPY_SIZE_BF16);
   const uint bs_col = tid % (BN / COPY_SIZE_BF16);
   const uint stride_Bs = NUM_THREADS / (BN / COPY_SIZE_BF16);
-  const uint cs_row = tid / (BN / COPY_SIZE_FLOAT);
-  const uint cs_col = tid % (BN / COPY_SIZE_FLOAT);
-  const uint stride_Cs = NUM_THREADS / (BN / COPY_SIZE_FLOAT);
+  const uint ds_row = tid / (BN / COPY_SIZE_FLOAT);
+  const uint ds_col = tid % (BN / COPY_SIZE_FLOAT);
+  const uint stride_Ds = NUM_THREADS / (BN / COPY_SIZE_FLOAT);
   
   //used for warp index with a block
   //here we simply use 4 * 2 warps with a block
@@ -78,20 +78,20 @@ __global__ void bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, cons
   const uint Bs_stage_offset = BK * (BN + SKEW_BF16);
   bf16* As_ptr_base = (bf16*)shem; 
   bf16* Bs_ptr_base = As_ptr_base + stages_count * As_stage_offset;
-  float* Cs = (float*)shem;
+  float* Ds = (float*)shem;
 
   const bf16* A_global_base = A + row_start_block * K;
   const bf16* B_global_base = B + col_start_block;
-  C += row_start_block * N + col_start_block;
+  D += row_start_block * N + col_start_block;
 
   const uint ldc = BN;
   const uint cRow_start = warp_row * WM;
   const uint cCol_start = warp_col * WN;
 
   pipe.producer_acquire();
-  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Cs) {
-        const float* src_ptr = &C[(row_offset + cs_row) * N + cs_col * 4];
-        float* dst_ptr = &Cs[(row_offset + cs_row) * BN + cs_col * 4];
+  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Ds) {
+        const float* src_ptr = &D[(row_offset + ds_row) * N + ds_col * 4];
+        float* dst_ptr = &Ds[(row_offset + ds_row) * BN + ds_col * 4];
         cuda::memcpy_async(dst_ptr, src_ptr, shape16, pipe);
   }
   pipe.producer_commit(); 
@@ -101,7 +101,7 @@ __global__ void bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, cons
   for(uint i = 0; i < TILES_PER_WARP_COL; i++){
     for(uint j = 0; j < TILES_PER_WARP_ROW; j++){
         const uint tile_pos = (cRow_start + i * TM) * ldc + cCol_start + j * TN;
-        wmma::load_matrix_sync(c_frag[i][j], &Cs[tile_pos], ldc, wmma::mem_row_major);
+        wmma::load_matrix_sync(c_frag[i][j], &Ds[tile_pos], ldc, wmma::mem_row_major);
     }
   }
   pipe.consumer_release();
@@ -170,14 +170,14 @@ __global__ void bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, cons
         for (int t = 0; t < c_frag[i][j].num_elements; t++)
             c_frag[i][j].x[t] *= alpha; 
         const uint tile_pos = (cRow_start + i * TM) * ldc + cCol_start + j * TN;
-        wmma::store_matrix_sync(&Cs[tile_pos], c_frag[i][j], ldc, wmma::mem_row_major);
+        wmma::store_matrix_sync(&Ds[tile_pos], c_frag[i][j], ldc, wmma::mem_row_major);
     }
   }
   __syncthreads();
   
-  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Cs) {
+  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Ds) {
         float4 tmp =
-            reinterpret_cast<const float4 *>(&Cs[(row_offset + cs_row) * BN + cs_col * 4])[0];
-        reinterpret_cast<float4*>(&C[(row_offset + cs_row) * N + cs_col * 4])[0] = tmp;
+            reinterpret_cast<const float4 *>(&Ds[(row_offset + ds_row) * BN + ds_col * 4])[0];
+        reinterpret_cast<float4*>(&D[(row_offset + ds_row) * N + ds_col * 4])[0] = tmp;
     }
 }

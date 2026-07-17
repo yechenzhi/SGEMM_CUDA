@@ -11,7 +11,7 @@
 template <const int BLOCKSIZE>
 __global__ void my_sgemm_shared_mem_block(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
-                                       float beta, float *C) {
+                                       float beta, float *D) {
   const int row = blockIdx.y * blockDim.y + threadIdx.y;
   const int col = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -56,6 +56,6 @@ __global__ void my_sgemm_shared_mem_block(int M, int N, int K, float alpha,
     // fetching the next block into the cache before slower threads are done
     __syncthreads();
   }
-  C[row * N + col] =
-      alpha * tmp + beta * C[row * N + col];
+  D[row * N + col] =
+      alpha * tmp + beta * D[row * N + col];
 }

@@ -71,35 +71,35 @@ int main(int argc, char **argv) {
   max_size = SIZE[SIZE.size() - 1];
   std::cout << "Max size: " << max_size << std::endl;
 
-  float alpha = 0.5, beta = 3.0; // GEMM input parameters, C=α*AB+β*C
+  float alpha = 0.5, beta = 3.0; // GEMM input parameters, D=α*AB+β*D
 
-  float *A = nullptr, *B = nullptr, *C = nullptr,
-        *C_ref = nullptr; // host matrices
-  float *dA = nullptr, *dB = nullptr, *dC = nullptr,
-        *dC_ref = nullptr; // device matrices
+  float *A = nullptr, *B = nullptr, *D = nullptr,
+        *D_ref = nullptr; // host matrices
+  float *dA = nullptr, *dB = nullptr, *dD = nullptr,
+        *dD_ref = nullptr; // device matrices
   __nv_bfloat16 *dA_bf16 = nullptr, *dB_bf16 = nullptr;
 
   A = (float *)malloc(sizeof(float) * max_size * max_size);
   B = (float *)malloc(sizeof(float) * max_size * max_size);
-  C = (float *)malloc(sizeof(float) * max_size * max_size);
-  C_ref = (float *)malloc(sizeof(float) * max_size * max_size);
+  D = (float *)malloc(sizeof(float) * max_size * max_size);
+  D_ref = (float *)malloc(sizeof(float) * max_size * max_size);
 
   randomize_matrix(A, max_size * max_size);
   randomize_matrix(B, max_size * max_size);
-  randomize_matrix(C, max_size * max_size);
+  randomize_matrix(D, max_size * max_size);
 
   cudaCheck(cudaMalloc((void **)&dA, sizeof(float) * max_size * max_size));
   cudaCheck(cudaMalloc((void **)&dB, sizeof(float) * max_size * max_size));
-  cudaCheck(cudaMalloc((void **)&dC, sizeof(float) * max_size * max_size));
-  cudaCheck(cudaMalloc((void **)&dC_ref, sizeof(float) * max_size * max_size));
+  cudaCheck(cudaMalloc((void **)&dD, sizeof(float) * max_size * max_size));
+  cudaCheck(cudaMalloc((void **)&dD_ref, sizeof(float) * max_size * max_size));
 
   cudaCheck(cudaMemcpy(dA, A, sizeof(float) * max_size * max_size,
                        cudaMemcpyHostToDevice));
   cudaCheck(cudaMemcpy(dB, B, sizeof(float) * max_size * max_size,
                        cudaMemcpyHostToDevice));
-  cudaCheck(cudaMemcpy(dC, C, sizeof(float) * max_size * max_size,
+  cudaCheck(cudaMemcpy(dD, D, sizeof(float) * max_size * max_size,
                        cudaMemcpyHostToDevice));
-  cudaCheck(cudaMemcpy(dC_ref, C, sizeof(float) * max_size * max_size,
+  cudaCheck(cudaMemcpy(dD_ref, D, sizeof(float) * max_size * max_size,
                        cudaMemcpyHostToDevice));
   
   if (use_bf16_input) {
@@ -126,19 +126,19 @@ int main(int argc, char **argv) {
     // Verify the correctness of the calculation, and execute it once before the
     // kernel function timing to avoid cold start errors
     if (kernel_num != 0 && kernel_num != 29 && kernel_num !=38) {
-      run_kernel(0, m, n, k, alpha, dA, dB, beta, dC_ref,
+      run_kernel(0, m, n, k, alpha, dA, dB, beta, dD_ref,
                  handle); // cuBLAS
       if (use_bf16_input) {
-          run_kernel(kernel_num, m, n, k, alpha, dA_bf16, dB_bf16, beta, dC, handle);
+          run_kernel(kernel_num, m, n, k, alpha, dA_bf16, dB_bf16, beta, dD, handle);
       } else {
-          run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+          run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dD, handle);
       }
       cudaCheck(cudaDeviceSynchronize());
       cudaCheck(cudaGetLastError()); // Check for async errors during kernel run
-      cudaMemcpy(C, dC, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
-      cudaMemcpy(C_ref, dC_ref, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
+      cudaMemcpy(D, dD, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
+      cudaMemcpy(D_ref, dD_ref, sizeof(float) * m * n, cudaMemcpyDeviceToHost);
 
-      if (!verify_matrix(C_ref, C, m * n, kernel_num)) {
+      if (!verify_matrix(D_ref, D, m * n, kernel_num)) {
         std::cout
             << "Failed to pass the correctness verification against NVIDIA "
                "cuBLAS."
@@ -151,10 +151,10 @@ int main(int argc, char **argv) {
           print_matrix(A, m, n, fs);
           fs << "B:\n";
           print_matrix(B, m, n, fs);
-          fs << "C:\n";
-          print_matrix(C, m, n, fs);
+          fs << "D:\n";
+          print_matrix(D, m, n, fs);
           fs << "Should:\n";
-          print_matrix(C_ref, m, n, fs);
+          print_matrix(D_ref, m, n, fs);
         }
         exit(EXIT_FAILURE);
       }
@@ -162,12 +162,12 @@ int main(int argc, char **argv) {
 
     cudaEventRecord(beg);
     for (int j = 0; j < repeat_times; j++) {
-      // We don't reset dC between runs to save time
-      // run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+      // We don't reset dD between runs to save time
+      // run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dD, handle);
       if (use_bf16_input) {
-          run_kernel(kernel_num, m, n, k, alpha, dA_bf16, dB_bf16, beta, dC, handle);
+          run_kernel(kernel_num, m, n, k, alpha, dA_bf16, dB_bf16, beta, dD, handle);
       } else {
-          run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dC, handle);
+          run_kernel(kernel_num, m, n, k, alpha, dA, dB, beta, dD, handle);
       }
     }
     cudaEventRecord(end);
@@ -183,21 +183,21 @@ int main(int argc, char **argv) {
         elapsed_time / repeat_times,
         (repeat_times * flops * 1e-9) / elapsed_time, m);
     fflush(stdout);
-    // make dC and dC_ref equal again (we modified dC while calling our kernel
+    // make dD and dD_ref equal again (we modified dD while calling our kernel
     // for benchmarking)
-    cudaCheck(cudaMemcpy(dC, dC_ref, sizeof(float) * m * n,
+    cudaCheck(cudaMemcpy(dD, dD_ref, sizeof(float) * m * n,
                          cudaMemcpyDeviceToDevice));
   }
 
   // Free up CPU and GPU space
   free(A);
   free(B);
-  free(C);
-  free(C_ref);
+  free(D);
+  free(D_ref);
   cudaFree(dA);
   cudaFree(dB);
-  cudaFree(dC);
-  cudaFree(dC_ref);
+  cudaFree(dD);
+  cudaFree(dD_ref);
   cublasDestroy(handle);
 
   return 0;

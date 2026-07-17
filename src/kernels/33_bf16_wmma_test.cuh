@@ -51,7 +51,7 @@ namespace {
 template <const int BM, const int BN, const int BK, const int TM, const int TN, const int TK,
           const int NUM_THREADS>
 __global__ void bf16_wmma_test(int M, int N, int K, float alpha, const float *A,
-                            const float *B, float beta, float *C) {
+                            const float *B, float beta, float *D) {
   const uint tid = threadIdx.y * blockDim.x + threadIdx.x;
   const uint row_start_block = blockIdx.x * BM;
   const uint col_start_block = blockIdx.y * BN;
@@ -81,7 +81,7 @@ __global__ void bf16_wmma_test(int M, int N, int K, float alpha, const float *A,
 
   A += row_start_block * K;
   B += col_start_block;
-  C += row_start_block * N + col_start_block;
+  D += row_start_block * N + col_start_block;
 
   for (uint k_base = 0; k_base < K; k_base += BK) {
     // load A and B to shared memory
@@ -113,14 +113,13 @@ __global__ void bf16_wmma_test(int M, int N, int K, float alpha, const float *A,
   const uint c_row = warp_row * TM;
   const uint c_col = warp_col * TN;
   if ( c_row < M && c_col < N ) {
-    wmma::load_matrix_sync(c_frag, &C[c_row * ldc + c_col], ldc, wmma::mem_row_major);
+    wmma::load_matrix_sync(c_frag, &D[c_row * ldc + c_col], ldc, wmma::mem_row_major);
 
     for (int i = 0; i < c_frag.num_elements; i++) {
       c_frag.x[i] = alpha * acc_frag.x[i] + beta * c_frag.x[i];
     }
 
-    wmma::store_matrix_sync(&C[c_row * ldc + c_col], c_frag, ldc, wmma::mem_row_major);
+    wmma::store_matrix_sync(&D[c_row * ldc + c_col], c_frag, ldc, wmma::mem_row_major);
   }
 
 }
-

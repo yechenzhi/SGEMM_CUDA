@@ -14,7 +14,7 @@ template <const int BM, const int BN, const int BK, const int WM, const int WN,
 __global__ void __launch_bounds__(NUM_THREADS) 
     my_sgemmWarptiling(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
-                                       float beta, float *C) {
+                                       float beta, float *D) {
   const int row_start_block = blockIdx.y * BM;
   const int col_start_block = blockIdx.x * BN;
   
@@ -83,10 +83,10 @@ __global__ void __launch_bounds__(NUM_THREADS)
       for(int wn_iter = 0; wn_iter < WNITER; ++wn_iter) {
           for (int tmIdx = 0; tmIdx < TM; ++tmIdx) {
               for (int tnIdx = 0; tnIdx < TN; ++tnIdx) {
-                  C[(row_start_block + warpRow * WM + wm_iter * WMSUB + row_in_warp * TM + tmIdx) * N + 
+                  D[(row_start_block + warpRow * WM + wm_iter * WMSUB + row_in_warp * TM + tmIdx) * N +
                     (col_start_block + warpCol * WN + wn_iter * WNSUB + col_in_warp * TN + tnIdx)] =
                   alpha * threadResults[wm_iter * TM + tmIdx][wn_iter * TN + tnIdx] + 
-                  beta * C[(row_start_block + warpRow * WM + wm_iter * WMSUB + row_in_warp * TM + tmIdx) * N + 
+                  beta * D[(row_start_block + warpRow * WM + wm_iter * WMSUB + row_in_warp * TM + tmIdx) * N +
                     (col_start_block + warpCol * WN + wn_iter * WNSUB + col_in_warp * TN + tnIdx)];
               }
           }

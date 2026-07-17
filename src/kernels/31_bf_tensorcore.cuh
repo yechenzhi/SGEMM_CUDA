@@ -59,7 +59,7 @@ template <const int BM, const int BN, const int BK,
 __global__ void __launch_bounds__(NUM_THREADS) 
     bf16_sgemm_tensorcore(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
-                                       float beta, float *C) { 
+                                       float beta, float *D) {
 
   const uint WARPS_PER_BLOCK_ROW = BN / WN;
   const uint WARPS_PER_BLOCK_COL = BM / WM;
@@ -80,40 +80,40 @@ __global__ void __launch_bounds__(NUM_THREADS)
   extern __shared__ char shmem[];
   bf16* shmem_A = (bf16*)shmem;
   bf16* shmem_B = shmem_A + BM * BK;
-  float* shmem_C = (float*)shmem;
+  float* shmem_D = (float*)shmem;
 
   // Adjust the beta scaler, as it'll be multiplied by alpha at the end of
   // each tile computation. Technically this is not generally correct (may result
   // in a loss of precision). Zero still needs to be specially handled though.
   beta /= alpha;
 
-  // copy C from global memory to shared memory
+  // copy D from global memory to shared memory
   // each thread loads float4 (BM * BN / NUM_THREADS / 4) times
   // we simply use a warp copy a row (32 * 4) at a time
   // and copy 16 times (BM / WARPS_PER_BLOCK)
   // here we assume BN = 128 = 32 * 4
-  const uint shmem_C_row = warpId;
-  const uint shmem_C_col = laneId * 4;
+  const uint shmem_D_row = warpId;
+  const uint shmem_D_col = laneId * 4;
   for(uint i = 0; i < BM / WARPS_PER_BLOCK; ++i) {
       float4 tmp = reinterpret_cast<const float4*>(
-          &C[(global_block_row + shmem_C_row + i * WARPS_PER_BLOCK) * N + global_block_col + shmem_C_col])[0];
+          &D[(global_block_row + shmem_D_row + i * WARPS_PER_BLOCK) * N + global_block_col + shmem_D_col])[0];
       reinterpret_cast<float4*>(
-          &shmem_C[(shmem_C_row + i * WARPS_PER_BLOCK) * BN + shmem_C_col])[0] = tmp;
+          &shmem_D[(shmem_D_row + i * WARPS_PER_BLOCK) * BN + shmem_D_col])[0] = tmp;
   }
   __syncthreads();
 
-  // copy Cs from shared memory to registers
+  // copy Ds from shared memory to registers
   wmma::fragment<wmma::accumulator, TM, TN, TK, float> c_frag[TILES_PER_WARP_COL][TILES_PER_WARP_ROW];
   for(uint i = 0; i < TILES_PER_WARP_COL; ++i) {
       for(uint j = 0; j < TILES_PER_WARP_ROW; ++j) {
           wmma::load_matrix_sync(c_frag[i][j],
-              &shmem_C[(warpRow * WM + i * TM) * BN + warpCol * WN + j * TN],
+              &shmem_D[(warpRow * WM + i * TM) * BN + warpCol * WN + j * TN],
               BN, wmma::mem_row_major);
       }
   }
   __syncthreads();
 
-  // scale C matrix
+  // scale D matrix
   for(uint i = 0; i < TILES_PER_WARP_COL; ++i) {
       for(uint j = 0; j < TILES_PER_WARP_ROW; ++j) {
         for(uint t = 0; t < c_frag[i][j].num_elements; ++t) {
@@ -169,7 +169,7 @@ __global__ void __launch_bounds__(NUM_THREADS)
             c_frag[i][j].x[t] *= alpha;
         }
         wmma::store_matrix_sync(
-            &shmem_C[(warpRow * WM + i * TM) * BN + warpCol * WN + j * TN],
+            &shmem_D[(warpRow * WM + i * TM) * BN + warpCol * WN + j * TN],
                 c_frag[i][j], BN, wmma::mem_row_major);
         }
  }
@@ -177,12 +177,10 @@ __global__ void __launch_bounds__(NUM_THREADS)
     
   for(uint i = 0; i < BM / WARPS_PER_BLOCK; ++i) {
         float4 tmp = reinterpret_cast<const float4*>(
-            &shmem_C[(shmem_C_row + i * WARPS_PER_BLOCK) * BN + shmem_C_col])[0];
+            &shmem_D[(shmem_D_row + i * WARPS_PER_BLOCK) * BN + shmem_D_col])[0];
         reinterpret_cast<float4*>(
-            &C[(global_block_row + shmem_C_row + i * WARPS_PER_BLOCK) * N + global_block_col + shmem_C_col])[0] = tmp;
+            &D[(global_block_row + shmem_D_row + i * WARPS_PER_BLOCK) * N + global_block_col + shmem_D_col])[0] = tmp;
   }
   __syncthreads();
 
 }
-
-

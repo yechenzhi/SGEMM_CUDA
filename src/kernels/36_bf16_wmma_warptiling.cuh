@@ -51,7 +51,7 @@ namespace bf16_warptiling{
 template <const int BM, const int BN, const int BK,const int WM, const int WN, const int TM, const int TN, const int TK,
           const int NUM_THREADS>
 __global__ void bf16_wmma_warptiling(int M, int N, int K, float alpha, const float *A,
-                            const float *B, float beta, float *C) {
+                            const float *B, float beta, float *D) {
   beta /= alpha;
   const uint tid = threadIdx.y * blockDim.x + threadIdx.x;
   const uint row_start_block = blockIdx.x * BM;
@@ -64,9 +64,9 @@ __global__ void bf16_wmma_warptiling(int M, int N, int K, float alpha, const flo
   const uint bs_row = tid / (BN / 4);
   const uint bs_col = tid % (BN / 4);
   const uint stride_Bs = NUM_THREADS / (BN / 4);
-  const uint cs_row = tid / (BN / 4);
-  const uint cs_col = tid % (BN / 4);
-  const uint stride_Cs = NUM_THREADS / (BN / 4);
+  const uint ds_row = tid / (BN / 4);
+  const uint ds_col = tid % (BN / 4);
+  const uint stride_Ds = NUM_THREADS / (BN / 4);
   
   //used for warp index with a block
   //here we simply use 4 * 2 warps with a block
@@ -95,27 +95,27 @@ __global__ void bf16_wmma_warptiling(int M, int N, int K, float alpha, const flo
   extern __shared__ char shem[];
   bf16* As = (bf16*)shem;
   bf16* Bs = As + BM * BK;
-  float* Cs = (float*)shem;
+  float* Ds = (float*)shem;
 
   A += row_start_block * K;
   B += col_start_block;
-  C += row_start_block * N + col_start_block;
+  D += row_start_block * N + col_start_block;
 
   const uint ldc = BN;
-  const uint cRow_start = warp_row * WM;
-  const uint cCol_start = warp_col * WN;
+  const uint dRow_start = warp_row * WM;
+  const uint dCol_start = warp_col * WN;
 
-  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Cs) {
+  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Ds) {
         float4 tmp_fp32 =
-            reinterpret_cast<const float4 *>(&C[(row_offset + cs_row) * N + cs_col * 4])[0];
-        reinterpret_cast<float4*>(&Cs[(row_offset + cs_row) * BN + cs_col * 4])[0] = tmp_fp32;
+            reinterpret_cast<const float4 *>(&D[(row_offset + ds_row) * N + ds_col * 4])[0];
+        reinterpret_cast<float4*>(&Ds[(row_offset + ds_row) * BN + ds_col * 4])[0] = tmp_fp32;
   }
    __syncthreads();
 
   for(uint i = 0; i < TILES_PER_WARP_COL; i++){
     for(uint j = 0; j < TILES_PER_WARP_ROW; j++){
-        const uint tile_pos = (cRow_start + i * TM) * ldc + cCol_start + j * TN;
-        wmma::load_matrix_sync(c_frag[i][j], &Cs[tile_pos], ldc, wmma::mem_row_major);
+        const uint tile_pos = (dRow_start + i * TM) * ldc + dCol_start + j * TN;
+        wmma::load_matrix_sync(c_frag[i][j], &Ds[tile_pos], ldc, wmma::mem_row_major);
     }
   }
   __syncthreads();
@@ -164,15 +164,15 @@ __global__ void bf16_wmma_warptiling(int M, int N, int K, float alpha, const flo
     for(uint j = 0; j < TILES_PER_WARP_ROW; j++){
         for (int t = 0; t < c_frag[i][j].num_elements; t++)
             c_frag[i][j].x[t] *= alpha; 
-        const uint tile_pos = (cRow_start + i * TM) * ldc + cCol_start + j * TN;
-        wmma::store_matrix_sync(&Cs[tile_pos], c_frag[i][j], ldc, wmma::mem_row_major);
+        const uint tile_pos = (dRow_start + i * TM) * ldc + dCol_start + j * TN;
+        wmma::store_matrix_sync(&Ds[tile_pos], c_frag[i][j], ldc, wmma::mem_row_major);
     }
   }
   __syncthreads();
   
-  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Cs) {
+  for(uint row_offset = 0; row_offset < BM; row_offset += stride_Ds) {
         float4 tmp =
-            reinterpret_cast<const float4 *>(&Cs[(row_offset + cs_row) * BN + cs_col * 4])[0];
-        reinterpret_cast<float4*>(&C[(row_offset + cs_row) * N + cs_col * 4])[0] = tmp;
+            reinterpret_cast<const float4 *>(&Ds[(row_offset + ds_row) * BN + ds_col * 4])[0];
+        reinterpret_cast<float4*>(&D[(row_offset + ds_row) * N + ds_col * 4])[0] = tmp;
     }
 }

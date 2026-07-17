@@ -14,7 +14,7 @@ template <const int BM, const int BN, const int BK, const int WM, const int WN,
 __global__ void __launch_bounds__(NUM_THREADS) 
     my_sgemmWarptiling_pointer(int M, int N, int K, float alpha,
                                        const float *A, const float *B,
-                                       float beta, float *C) {
+                                       float beta, float *D) {
   const int row_start_block = blockIdx.y * BM;
   const int col_start_block = blockIdx.x * BN;
   
@@ -47,7 +47,7 @@ __global__ void __launch_bounds__(NUM_THREADS)
   const int col_in_warp = tid_in_warp % (WNSUB / TN);
   const int row_in_warp = tid_in_warp / (WNSUB / TN);
 
-  C += (row_start_block + warpRow * WM) * N + col_start_block + warpCol * WN;
+  D += (row_start_block + warpRow * WM) * N + col_start_block + warpCol * WN;
 
 
   for (int bkIdx = 0; bkIdx < K; bkIdx += BK) {
@@ -96,14 +96,14 @@ __global__ void __launch_bounds__(NUM_THREADS)
 
   for(int wm_iter = 0; wm_iter < WMITER; ++wm_iter) {
       for(int wn_iter = 0; wn_iter < WNITER; ++wn_iter) {
-          float *C_interim = C + (wm_iter * WMSUB) * N + (wn_iter * WNSUB);
-        //   float *C_interim = C + (wm_iter * WMSUB + row_in_warp * TM) * N + wn_iter * WNSUB + col_in_warp * TN;
+          float *D_interim = D + (wm_iter * WMSUB) * N + (wn_iter * WNSUB);
+        //   float *D_interim = D + (wm_iter * WMSUB + row_in_warp * TM) * N + wn_iter * WNSUB + col_in_warp * TN;
           for (int tmIdx = 0; tmIdx < TM; ++tmIdx) {
               for (int tnIdx = 0; tnIdx < TN; tnIdx += 4) {
 
-                //   float4 tmp = reinterpret_cast<float4 *>(&C_interim[tmIdx * N + tnIdx])[0];
+                //   float4 tmp = reinterpret_cast<float4 *>(&D_interim[tmIdx * N + tnIdx])[0];
                   float4 tmp = reinterpret_cast<float4 *>(
-                    &C_interim[(row_in_warp * TM + tmIdx) * N + (col_in_warp * TN + tnIdx)])[0];
+                    &D_interim[(row_in_warp * TM + tmIdx) * N + (col_in_warp * TN + tnIdx)])[0];
                   const int thread_row = wm_iter * TM + tmIdx;
                   const int thread_col = wn_iter * TN + tnIdx;
                   tmp.x = alpha * threadResults[thread_row][thread_col + 0] + beta * tmp.x;
@@ -111,7 +111,7 @@ __global__ void __launch_bounds__(NUM_THREADS)
                   tmp.z = alpha * threadResults[thread_row][thread_col + 2] + beta * tmp.z;
                   tmp.w = alpha * threadResults[thread_row][thread_col + 3] + beta * tmp.w;
                   reinterpret_cast<float4 *>(
-                    &C_interim[(row_in_warp * TM + tmIdx) * N + (col_in_warp * TN + tnIdx)])[0] = tmp;
+                    &D_interim[(row_in_warp * TM + tmIdx) * N + (col_in_warp * TN + tnIdx)])[0] = tmp;
               }
           }
       }

@@ -173,10 +173,10 @@ void run_sgemm_naive(int M, int N, int K, float alpha, float *A, float *B,
 }
 
 void run_my_sgemm_naive(int M, int N, int K, float alpha, float *A, float *B,
-                     float beta, float *C) {
+                     float beta, float *D) {
   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
   dim3 blockDim(32, 32);
-  my_sgemm_naive<<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+  my_sgemm_naive<<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void run_sgemm_coalesce(int M, int N, int K, float alpha, float *A, float *B,
@@ -188,10 +188,10 @@ void run_sgemm_coalesce(int M, int N, int K, float alpha, float *A, float *B,
 }
 
 void run_my_sgemm_coalesce(int M, int N, int K, float alpha, float *A, float *B,
-                     float beta, float *C) {
+                     float beta, float *D) {
   dim3 gridDim(CEIL_DIV(M, 32), CEIL_DIV(N, 32));
   dim3 blockDim(32, 32);
-  my_sgemm_global_mem_coalesce<<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+  my_sgemm_global_mem_coalesce<<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void run_sgemm_shared_mem_block(int M, int N, int K, float alpha, float *A,
@@ -209,7 +209,7 @@ void run_sgemm_shared_mem_block(int M, int N, int K, float alpha, float *A,
 }
 
 void run_my_sgemm_shared_mem_block(int M, int N, int K, float alpha, float *A,
-                                float *B, float beta, float *C) {
+                                float *B, float beta, float *D) {
   dim3 gridDim(CEIL_DIV(N, 32), CEIL_DIV(M, 32));
   dim3 blockDim(32, 32);
   // L1 cache becomes useless, since we access GMEM only via SMEM, so we carve
@@ -219,7 +219,7 @@ void run_my_sgemm_shared_mem_block(int M, int N, int K, float alpha, float *A,
                        cudaFuncAttributePreferredSharedMemoryCarveout,
                        cudaSharedmemCarveoutMaxShared);
   my_sgemm_shared_mem_block<32>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void runSgemm1DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
@@ -235,7 +235,7 @@ void runSgemm1DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
 }
 
 void run_my_Sgemm1DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
-                           float beta, float *C) {
+                           float beta, float *D) {
   const uint BM = 64;
   const uint BN = 64;
   const uint BK = 8;
@@ -243,7 +243,7 @@ void run_my_Sgemm1DBlocktiling(int M, int N, int K, float alpha, float *A, float
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   dim3 blockDim(BM, BN / TM);
   my_sgemm1DBlocktiling<BM, BN, BK, TM>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void runSgemm2DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
@@ -271,7 +271,7 @@ void runSgemm2DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
 }
 
 void run_my_Sgemm2DBlocktiling(int M, int N, int K, float alpha, float *A, float *B,
-                           float beta, float *C) {
+                           float beta, float *D) {
   const uint BK = 8;
   const uint TM = 8;
   const uint TN = 8;
@@ -280,12 +280,12 @@ void run_my_Sgemm2DBlocktiling(int M, int N, int K, float alpha, float *A, float
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   dim3 blockDim(BM / TM, BN / TN);
   my_sgemm2DBlocktiling<BM, BN, BK, TM, TN>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
   
 }
 
 void run_my_Sgemm2DBlocktiling_v2(int M, int N, int K, float alpha, float *A, float *B,
-                           float beta, float *C) {
+                           float beta, float *D) {
   const uint BK = 8;
   const uint TM = 8;
   const uint TN = 8;
@@ -294,12 +294,12 @@ void run_my_Sgemm2DBlocktiling_v2(int M, int N, int K, float alpha, float *A, fl
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   dim3 blockDim(BN / TN, BM / TM);
   my_sgemm2DBlocktiling_v2<BM, BN, BK, TM, TN>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
   
 }
 
 void run_my_Sgemm2DBlocktiling_v3(int M, int N, int K, float alpha, float *A, float *B,
-                           float beta, float *C) {
+                           float beta, float *D) {
   const uint BK = 8;
   const uint TM = 8;
   const uint TN = 8;
@@ -308,7 +308,7 @@ void run_my_Sgemm2DBlocktiling_v3(int M, int N, int K, float alpha, float *A, fl
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   dim3 blockDim(BN / TN, BM / TM);
   my_sgemm2DBlocktiling_v3<BM, BN, BK, TM, TN>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
   
 }
 
@@ -337,7 +337,7 @@ void runSgemmVectorize(int M, int N, int K, float alpha, float *A, float *B,
 }
 
 void run_my_SgemmVectorize(int M, int N, int K, float alpha, float *A, float *B,
-                       float beta, float *C) {
+                       float beta, float *D) {
   const uint BK = 8;
   const uint TM = 8;
   const uint TN = 8;
@@ -347,7 +347,7 @@ void run_my_SgemmVectorize(int M, int N, int K, float alpha, float *A, float *B,
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   dim3 blockDim(BN / TN, BM / TM);
   my_sgemmVectorize<BM, BN, BK, TM, TN>
-        <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+        <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void runSgemmResolveBankConflicts(int M, int N, int K, float alpha, float *A,
@@ -375,7 +375,7 @@ void runSgemmResolveBankConflicts(int M, int N, int K, float alpha, float *A,
 }
 
 void run_my_ResolveBankConflicts(int M, int N, int K, float alpha, float *A, float *B,
-                       float beta, float *C) {
+                       float beta, float *D) {
   const uint BK = 8;
   const uint TM = 8;
   const uint TN = 8;
@@ -385,7 +385,7 @@ void run_my_ResolveBankConflicts(int M, int N, int K, float alpha, float *A, flo
   dim3 gridDim(CEIL_DIV(N, BN), CEIL_DIV(M, BM));
   dim3 blockDim(BN / TN, BM / TM);
   my_sgemmResolveBankConflicts<BM, BN, BK, TM, TN>
-        <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+        <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void runSgemmResolveBankExtraCol(int M, int N, int K, float alpha, float *A,
@@ -456,7 +456,7 @@ void runSgemmAutotuned(int M, int N, int K, float alpha, float *A, float *B,
 
 // 这是 Kernel 20 的 autotuning host 函数
 void runKernel20Autotuned(int M, int N, int K, float alpha, float *A, float *B,
-                         float beta, float *C) {
+                         float beta, float *D) {
   // =================================================================
   // 这些常量将会被 autotune_kernel20.sh 脚本自动修改
   // 这里的初始值只是一个占位符
@@ -499,7 +499,7 @@ void runKernel20Autotuned(int M, int N, int K, float alpha, float *A, float *B,
 
   // 启动你的 Kernel 20
   my_sgemmVectorize<K20_BM, K20_BN, K20_BK, K20_TM, K20_TN>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void runSgemmWarptiling(int M, int N, int K, float alpha, float *A, float *B,
@@ -564,7 +564,7 @@ void runSgemmWarptiling(int M, int N, int K, float alpha, float *A, float *B,
 }
 
 void run_my_SgemmWarptiling(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
   // Settings for A100
   // const uint K23_NUM_THREADS = 128;
   // const uint K23_BN = 128;
@@ -621,11 +621,11 @@ void run_my_SgemmWarptiling(int M, int N, int K, float alpha, float *A, float *B
   dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
   my_sgemmWarptiling<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
                   K23_TN, K23_NUM_THREADS>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void run_my_SgemmWarptiling_compute(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
   // Settings for A100
   // const uint K23_NUM_THREADS = 128;
   // const uint K23_BN = 128;
@@ -682,11 +682,11 @@ void run_my_SgemmWarptiling_compute(int M, int N, int K, float alpha, float *A, 
   dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
   my_sgemmWarptiling_compute<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
                   K23_TN, K23_NUM_THREADS>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void run_my_SgemmWarptiling_write(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
   // Settings for A100
   // const uint K23_NUM_THREADS = 128;
   // const uint K23_BN = 128;
@@ -743,11 +743,11 @@ void run_my_SgemmWarptiling_write(int M, int N, int K, float alpha, float *A, fl
   dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
   my_sgemmWarptiling_write<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
                   K23_TN, K23_NUM_THREADS>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void run_my_SgemmWarptiling_pointer(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
   // Settings for A100
   // const uint K23_NUM_THREADS = 128;
   // const uint K23_BN = 128;
@@ -804,11 +804,11 @@ void run_my_SgemmWarptiling_pointer(int M, int N, int K, float alpha, float *A, 
   dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
   my_sgemmWarptiling_pointer<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
                   K23_TN, K23_NUM_THREADS>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void run_my_SgemmWarptiling_pointer2(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
   const uint K23_NUM_THREADS = 128;
   const uint K23_BN = 128;
   const uint K23_BM = 128;
@@ -854,11 +854,11 @@ void run_my_SgemmWarptiling_pointer2(int M, int N, int K, float alpha, float *A,
   dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
   my_sgemmWarptiling_pointer2<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
                   K23_TN, K23_NUM_THREADS>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void run_my_SgemmWarptiling_device(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
   const uint K23_NUM_THREADS = 128;
   const uint K23_BN = 128;
   const uint K23_BM = 128;
@@ -904,7 +904,7 @@ void run_my_SgemmWarptiling_device(int M, int N, int K, float alpha, float *A, f
   dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
   my_sgemmWarptiling_device<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
                   K23_TN, K23_NUM_THREADS>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void runSgemmDoubleBuffering(int M, int N, int K, float alpha, float *A,
@@ -1020,7 +1020,7 @@ void runSgemmDoubleBuffering2(int M, int N, int K, float alpha, float *A,
 }
 
 void run_bf16_warptiling(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
   const uint K23_NUM_THREADS = 128;
   const uint K23_BN = 128;
   const uint K23_BM = 128;
@@ -1066,11 +1066,11 @@ void run_bf16_warptiling(int M, int N, int K, float alpha, float *A, float *B,
   dim3 gridDim(CEIL_DIV(N, K23_BN), CEIL_DIV(M, K23_BM));
   bf16_sgemmWarptiling<K23_BM, K23_BN, K23_BK, K23_WM, K23_WN, K23_WMITER, K23_WNITER, K23_TM,
                   K23_TN, K23_NUM_THREADS>
-      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, C);
+      <<<gridDim, blockDim>>>(M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16_tensorcore(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 128;
   constexpr int BN = 128;
@@ -1094,11 +1094,11 @@ void run_bf16_tensorcore(int M, int N, int K, float alpha, float *A, float *B,
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1122,11 +1122,11 @@ void run_bf16_tensorcore(int M, int N, int K, float alpha, float *A, float *B,
 
   bf16_sgemm_tensorcore<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, WARPS_PER_BLOCK>
       <<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16_wmma_simple(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 64;
   constexpr int BN = 64;
@@ -1147,11 +1147,11 @@ void run_bf16_wmma_simple(int M, int N, int K, float alpha, float *A, float *B,
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1179,11 +1179,11 @@ void run_bf16_wmma_simple(int M, int N, int K, float alpha, float *A, float *B,
   gridDim.y = (N + (TN * blockDim.y - 1)) / (TN * blockDim.y);
 
   bf16_wmma_simple<BM, BN, BK, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16_wmma_test(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 64;
   constexpr int BN = 64;
@@ -1205,11 +1205,11 @@ void run_bf16_wmma_test(int M, int N, int K, float alpha, float *A, float *B,
   gridDim.y = (N + (TN * blockDim.y - 1)) / (TN * blockDim.y);
 
   bf16_wmma_test<BM, BN, BK, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16_wmma_cshare(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 64;
   constexpr int BN = 64;
@@ -1231,11 +1231,11 @@ void run_bf16_wmma_cshare(int M, int N, int K, float alpha, float *A, float *B,
   gridDim.y = (N + (TN * blockDim.y - 1)) / (TN * blockDim.y);
 
   bf16_wmma_cshare<BM, BN, BK, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16_wmma_reuse(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 64;
   constexpr int BN = 64;
@@ -1254,11 +1254,11 @@ void run_bf16_wmma_reuse(int M, int N, int K, float alpha, float *A, float *B,
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1286,11 +1286,11 @@ void run_bf16_wmma_reuse(int M, int N, int K, float alpha, float *A, float *B,
   gridDim.y = (N + (TN * blockDim.y - 1)) / (TN * blockDim.y);
 
   bf16_wmma_reuse<BM, BN, BK, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16_wmma_warptiling(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 128;
   constexpr int BN = 128;
@@ -1312,11 +1312,11 @@ void run_bf16_wmma_warptiling(int M, int N, int K, float alpha, float *A, float 
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1344,11 +1344,11 @@ void run_bf16_wmma_warptiling(int M, int N, int K, float alpha, float *A, float 
   gridDim.y = (N + BN - 1) / BN;
 
   bf16_wmma_warptiling<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16_wmma_warptiling_float2(int M, int N, int K, float alpha, float *A, float *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 128;
   constexpr int BN = 128;
@@ -1370,11 +1370,11 @@ void run_bf16_wmma_warptiling_float2(int M, int N, int K, float alpha, float *A,
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1402,125 +1402,125 @@ void run_bf16_wmma_warptiling_float2(int M, int N, int K, float alpha, float *A,
   gridDim.y = (N + BN - 1) / BN;
 
   bf16_wmma_warptiling_float2<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A,
-                float *B, float beta, float *C, cublasHandle_t handle) {
+                float *B, float beta, float *D, cublasHandle_t handle) {
   switch (kernel_num) {
   case 0:
-    runCublasFP32(handle, M, N, K, alpha, A, B, beta, C);
+    runCublasFP32(handle, M, N, K, alpha, A, B, beta, D);
     break;
   case 1:
-    run_sgemm_naive(M, N, K, alpha, A, B, beta, C);
+    run_sgemm_naive(M, N, K, alpha, A, B, beta, D);
     break;
   case 2:
-    run_sgemm_coalesce(M, N, K, alpha, A, B, beta, C);
+    run_sgemm_coalesce(M, N, K, alpha, A, B, beta, D);
     break;
   case 14:
-    run_my_sgemm_coalesce(M, N, K, alpha, A, B, beta, C);
+    run_my_sgemm_coalesce(M, N, K, alpha, A, B, beta, D);
     break;
   case 3:
-    run_sgemm_shared_mem_block(M, N, K, alpha, A, B, beta, C);
+    run_sgemm_shared_mem_block(M, N, K, alpha, A, B, beta, D);
     break;
   case 15:
-    run_my_sgemm_shared_mem_block(M, N, K, alpha, A, B, beta, C);
+    run_my_sgemm_shared_mem_block(M, N, K, alpha, A, B, beta, D);
     break;
   case 4:
-    runSgemm1DBlocktiling(M, N, K, alpha, A, B, beta, C);
+    runSgemm1DBlocktiling(M, N, K, alpha, A, B, beta, D);
     break;
   case 16:
-    run_my_Sgemm1DBlocktiling(M, N, K, alpha, A, B, beta, C);
+    run_my_Sgemm1DBlocktiling(M, N, K, alpha, A, B, beta, D);
     break;
   case 5:
-    runSgemm2DBlocktiling(M, N, K, alpha, A, B, beta, C);
+    runSgemm2DBlocktiling(M, N, K, alpha, A, B, beta, D);
     break;
   case 17:
-    run_my_Sgemm2DBlocktiling(M, N, K, alpha, A, B, beta, C);
+    run_my_Sgemm2DBlocktiling(M, N, K, alpha, A, B, beta, D);
     break;
   case 18:
-    run_my_Sgemm2DBlocktiling_v2(M, N, K, alpha, A, B, beta, C);
+    run_my_Sgemm2DBlocktiling_v2(M, N, K, alpha, A, B, beta, D);
     break;
   case 19:
-    run_my_Sgemm2DBlocktiling_v3(M, N, K, alpha, A, B, beta, C);
+    run_my_Sgemm2DBlocktiling_v3(M, N, K, alpha, A, B, beta, D);
     break;
   case 6:
-    runSgemmVectorize(M, N, K, alpha, A, B, beta, C);
+    runSgemmVectorize(M, N, K, alpha, A, B, beta, D);
     break;
   case 20:
-    run_my_SgemmVectorize(M, N, K, alpha, A, B, beta, C);
+    run_my_SgemmVectorize(M, N, K, alpha, A, B, beta, D);
     break;
   case 7:
-    runSgemmResolveBankConflicts(M, N, K, alpha, A, B, beta, C);
+    runSgemmResolveBankConflicts(M, N, K, alpha, A, B, beta, D);
     break;
   case 22:
-    runKernel20Autotuned(M, N, K, alpha, A, B, beta, C);
+    runKernel20Autotuned(M, N, K, alpha, A, B, beta, D);
     break;
   case 21:
-    run_my_ResolveBankConflicts(M, N, K, alpha, A, B, beta, C);
+    run_my_ResolveBankConflicts(M, N, K, alpha, A, B, beta, D);
     break;
   case 8:
-    runSgemmResolveBankExtraCol(M, N, K, alpha, A, B, beta, C);
+    runSgemmResolveBankExtraCol(M, N, K, alpha, A, B, beta, D);
     break;
   case 9:
-    runSgemmAutotuned(M, N, K, alpha, A, B, beta, C);
+    runSgemmAutotuned(M, N, K, alpha, A, B, beta, D);
     break;
   case 10:
-    runSgemmWarptiling(M, N, K, alpha, A, B, beta, C);
+    runSgemmWarptiling(M, N, K, alpha, A, B, beta, D);
     break;
   case 23:
-    run_my_SgemmWarptiling(M, N, K, alpha, A, B, beta, C);
+    run_my_SgemmWarptiling(M, N, K, alpha, A, B, beta, D);
     break;
   case 24:
-    run_my_SgemmWarptiling_compute(M, N, K, alpha, A, B, beta, C);
+    run_my_SgemmWarptiling_compute(M, N, K, alpha, A, B, beta, D);
     break;
   case 25:
-    run_my_SgemmWarptiling_write(M, N, K, alpha, A, B, beta, C);
+    run_my_SgemmWarptiling_write(M, N, K, alpha, A, B, beta, D);
     break;
   case 26:
-    run_my_SgemmWarptiling_pointer(M, N, K, alpha, A, B, beta, C);
+    run_my_SgemmWarptiling_pointer(M, N, K, alpha, A, B, beta, D);
     break;
   case 27:
-    run_my_SgemmWarptiling_pointer2(M, N, K, alpha, A, B, beta, C);
+    run_my_SgemmWarptiling_pointer2(M, N, K, alpha, A, B, beta, D);
     break;
   case 28:
-    run_my_SgemmWarptiling_device(M, N, K, alpha, A, B, beta, C);
+    run_my_SgemmWarptiling_device(M, N, K, alpha, A, B, beta, D);
     break;
   case 11:
-    runSgemmDoubleBuffering(M, N, K, alpha, A, B, beta, C);
+    runSgemmDoubleBuffering(M, N, K, alpha, A, B, beta, D);
     break;
   case 12:
-    runSgemmDoubleBuffering2(M, N, K, alpha, A, B, beta, C);
+    runSgemmDoubleBuffering2(M, N, K, alpha, A, B, beta, D);
     break;
   case 13:
-    run_my_sgemm_naive(M, N, K, alpha, A, B, beta, C);
+    run_my_sgemm_naive(M, N, K, alpha, A, B, beta, D);
     break;
   case 29:
-    runCublasBF16(handle, M, N, K, alpha, A, B, beta, C);
+    runCublasBF16(handle, M, N, K, alpha, A, B, beta, D);
     break;
   case 30:
-    run_bf16_warptiling(M, N, K, alpha, A, B, beta, C);
+    run_bf16_warptiling(M, N, K, alpha, A, B, beta, D);
     break;
   case 31:
-    run_bf16_tensorcore(M, N, K, alpha, A, B, beta, C);
+    run_bf16_tensorcore(M, N, K, alpha, A, B, beta, D);
     break;
   case 32:
-    run_bf16_wmma_simple(M, N, K, alpha, A, B, beta, C);
+    run_bf16_wmma_simple(M, N, K, alpha, A, B, beta, D);
     break;
   case 33:
-    run_bf16_wmma_test(M, N, K, alpha, A, B, beta, C);
+    run_bf16_wmma_test(M, N, K, alpha, A, B, beta, D);
     break;
   case 34:
-    run_bf16_wmma_cshare(M, N, K, alpha, A, B, beta, C);
+    run_bf16_wmma_cshare(M, N, K, alpha, A, B, beta, D);
     break;
   case 35:
-    run_bf16_wmma_reuse(M, N, K, alpha, A, B, beta, C);
+    run_bf16_wmma_reuse(M, N, K, alpha, A, B, beta, D);
     break;
   case 36:
-    run_bf16_wmma_warptiling(M, N, K, alpha, A, B, beta, C);
+    run_bf16_wmma_warptiling(M, N, K, alpha, A, B, beta, D);
     break;
   case 37:
-    run_bf16_wmma_warptiling_float2(M, N, K, alpha, A, B, beta, C);
+    run_bf16_wmma_warptiling_float2(M, N, K, alpha, A, B, beta, D);
     break;
   default:
     throw std::invalid_argument("Unknown kernel number");
@@ -1528,7 +1528,7 @@ void run_kernel(int kernel_num, int M, int N, int K, float alpha, float *A,
 }
 
 void run_bf16AB_wmma(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bfloat16 *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 128;
   constexpr int BN = 128;
@@ -1550,11 +1550,11 @@ void run_bf16AB_wmma(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bf
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1582,11 +1582,11 @@ void run_bf16AB_wmma(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bf
   gridDim.y = (N + BN - 1) / BN;
 
   bf16AB_wmma_warptiling<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16AB_wmma_async(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bfloat16 *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 128;
   constexpr int BN = 64;
@@ -1608,11 +1608,11 @@ void run_bf16AB_wmma_async(int M, int N, int K, float alpha, __nv_bfloat16 *A, _
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1640,11 +1640,11 @@ void run_bf16AB_wmma_async(int M, int N, int K, float alpha, __nv_bfloat16 *A, _
   gridDim.y = (N + BN - 1) / BN;
 
   bf16AB_wmma_async<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16AB_wmma_double_buffer(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bfloat16 *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 128;
   constexpr int BN = 64;
@@ -1666,11 +1666,11 @@ void run_bf16AB_wmma_double_buffer(int M, int N, int K, float alpha, __nv_bfloat
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(2 * required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(2 * required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1698,11 +1698,11 @@ void run_bf16AB_wmma_double_buffer(int M, int N, int K, float alpha, __nv_bfloat
   gridDim.y = (N + BN - 1) / BN;
 
   bf16AB_wmma_double_buffer<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bfloat16 *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 128;
   constexpr int BN = 64;
@@ -1726,11 +1726,11 @@ void run_bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, __nv_bfloat
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(2 * required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(2 * required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1758,11 +1758,11 @@ void run_bf16AB_wmma_bank_conflict(int M, int N, int K, float alpha, __nv_bfloat
   gridDim.y = (N + BN - 1) / BN;
 
   bf16AB_wmma_bank_conflict<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, SKEW_BF16><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 void run_bf16AB_wmma_l2cache(int M, int N, int K, float alpha, __nv_bfloat16 *A, __nv_bfloat16 *B,
-                        float beta, float *C) {
+                        float beta, float *D) {
 
   constexpr int BM = 128;
   constexpr int BN = 64;
@@ -1788,11 +1788,11 @@ void run_bf16AB_wmma_l2cache(int M, int N, int K, float alpha, __nv_bfloat16 *A,
   const size_t shmem_size_for_B = BK * SHMEM_B_STRIDE * sizeof(bf16);
   
   
-  const size_t shmem_size_for_CD = BM * BN * sizeof(float);
+  const size_t shmem_size_for_D = BM * BN * sizeof(float);
   
  
   const size_t required_shmem_for_AB = shmem_size_for_A + shmem_size_for_B;
-  const size_t sharedMemSizeInBytes = std::max(STAGR_COUNT * required_shmem_for_AB, shmem_size_for_CD);
+  const size_t sharedMemSizeInBytes = std::max(STAGR_COUNT * required_shmem_for_AB, shmem_size_for_D);
 
   int device;
   cudaGetDevice(&device);
@@ -1819,31 +1819,31 @@ void run_bf16AB_wmma_l2cache(int M, int N, int K, float alpha, __nv_bfloat16 *A,
   gridDim.x = (M + BM - 1) / BM * ((N + BN - 1) / BN);
 
   bf16AB_wmma_l2cache<BM, BN, BK, WM, WN, TM, TN, TK, NUM_THREADS, SKEW_BF16, GROUP_SIZE_M, STAGR_COUNT><<<gridDim, blockDim, sharedMemSizeInBytes>>>(
-          M, N, K, alpha, A, B, beta, C);
+          M, N, K, alpha, A, B, beta, D);
 }
 
 
 void run_kernel(int kernel_num, int M, int N, int K, float alpha, 
                 __nv_bfloat16 *A, __nv_bfloat16 *B, 
-                float beta, float *C, cublasHandle_t handle) {
+                float beta, float *D, cublasHandle_t handle) {
   switch (kernel_num) {
     case 38:
-      runCublasBF16_AB(handle, M, N, K, alpha, A, B, beta, C);
+      runCublasBF16_AB(handle, M, N, K, alpha, A, B, beta, D);
       break;
     case 39:
-      run_bf16AB_wmma(M, N, K, alpha, A, B, beta, C);
+      run_bf16AB_wmma(M, N, K, alpha, A, B, beta, D);
       break;
     case 40:
-      run_bf16AB_wmma_async(M, N, K, alpha, A, B, beta, C);
+      run_bf16AB_wmma_async(M, N, K, alpha, A, B, beta, D);
       break;
     case 41:
-      run_bf16AB_wmma_double_buffer(M, N, K, alpha, A, B, beta, C);
+      run_bf16AB_wmma_double_buffer(M, N, K, alpha, A, B, beta, D);
       break;
     case 42:
-      run_bf16AB_wmma_bank_conflict(M, N, K, alpha, A, B, beta, C);
+      run_bf16AB_wmma_bank_conflict(M, N, K, alpha, A, B, beta, D);
       break;
     case 43:
-      run_bf16AB_wmma_l2cache(M, N, K, alpha, A, B, beta, C);
+      run_bf16AB_wmma_l2cache(M, N, K, alpha, A, B, beta, D);
       break;
     default:
       throw std::invalid_argument("Unknown BF16 kernel number or kernel does not support BF16 input.");
